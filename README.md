@@ -1,16 +1,15 @@
 # AR2M
-The AR2M (Arduino Ribon to MIDI) controller is a cheaper alternative to the Modulin made by Wintergatan.
+The AR2M (Arduino Ribon to MIDI) controller is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
 
 This project is made up of the following:
 * 1x wood plank, or something else to put the Arduino, ribbon and pressure pads on.
 * 1x 500mm soft pot
-* 2x Pressure pads
+* 2x Force Sensetive Resistors (Rated for 0-10kg)
 * 1x Arduino Uno R3
 * 1x Sparkfun MIDI Shield
 * For the Sparkfun MIDI Shield I would recommend getting passthough headers instead of the standard ones.
 
-
-I have designed this project around the useage of VCV Rack 2, but since MIDI is used you can use this with a keyboard or whatever you want that supports MIDI.
+I have designed this project around the useage of VCV Rack 2, but since MIDI is used, you can use this with a keyboard or whatever you want that supports MIDI.
 
 Unlike Wintergatans Modulin you will need 2 hands to play the controller 1 for the positional ribbon and 1 to activate the controller.
 
@@ -18,7 +17,7 @@ Unlike Wintergatans Modulin you will need 2 hands to play the controller 1 for t
 
 This is because the soft pot ribbon when lightly pressing on the ribbon the values can be read furhter up the ribbon than the actual position of your finger.
 To get around this I have put a pressure pad on the end of the instrument to activate the controller. 
-![Pressure end](https://github.com/CraCaNN/AR2M/blob/main/pressure%20close%20up.jpg?)
+![Pressure end](https://github.com/CraCaNN/AR2M/blob/main/pressure%20close%20up.jpg)
 Initially I did have another pressure ribbon ontop of the position ribbon but this increaced the amount of pressure required to play.
 There is probably a way around this but this was an easier way of doing it.
 
