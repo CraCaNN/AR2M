@@ -1,5 +1,5 @@
 # AR2M
-The AR2M (Arduino Ribon to MIDI) cheaper alternative to the Modulin made by Wintergatan.
+The AR2M (Arduino Ribon to MIDI) controller is a cheaper alternative to the Modulin made by Wintergatan.
 
 This project is made up of the following:
 * 1x wood plank, or something else to put the Arduino, ribbon and pressure pads on.
