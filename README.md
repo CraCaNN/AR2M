@@ -37,3 +37,10 @@ I have included the patch that I have created to work with the AR2M controller
 2. Make sure you have the [MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) downloaded via the Arduino library manager, not the MIDI USB library.
 3. Make sure that the switch on the MIDI shield is set to program otherwise the upload will fail!
 4. Select your Arduino and upload.
+
+# Example VCV Patch
+For the Included VCV patch you will need the following free VCV libraries:
+
+- The [Surge](https://library.vcvrack.com/SurgeXTRack) plugins 
+- The [NANO](https://library.vcvrack.com/NANOModules) modules
+- The [Interrobang](https://library.vcvrack.com/Interrobang) plugins
