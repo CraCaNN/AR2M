@@ -1,7 +1,6 @@
 //Options//
 //Position ribbon
-const int sectionSize = 32;//change the 'size' of the note sections on the ribbon 
-const int offSet = 0; //27 for midi c3 at base of strip 
+const int sectionSize = 32;//change the 'size' of the note sections on the ribbon
 const int upperSP = 920;//set the position where the position ribbon to ignore, this works for my soft pot (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
 
 //Pressure ribbon
@@ -49,14 +48,14 @@ int noteNum = 0;//The note to play now
 int prevNoteNum = 0;//the previous note that was played
 
 int noteVelo = 0;//The reading given by the pressure ribbon, currently programmed to output through the MIDI aftertouch command
-
+int prevNoteVelo = 0;//Prevent sending the same pressure commands
 
 
 //this is all of the non sharp notes from C2 to around C6
 const int noteNumList[] = {36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91};
 //I would recommend using the quantiser offset or Octave offset in VCV to get the key desired to play in rather than altering the controller
 
-//These are all of the notes from A0
+//These are all of the notes from A0. The sharp notes on the ribbon didnt sound right to me with the slew limiter on VCV but its probably because im not skilled enough
 //const int noteNumList[] = {21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96};
 
 bool isOff = true;//Used to determine the status of the controller for the leds and to prevent the main loop from spamming MIDI off messages
@@ -99,10 +98,10 @@ void setup() {
 
 void readPosition(){
   preSoftPotRead = analogRead(softpotPin);//get position value
-  if (preSoftPotRead < upperSP) {//
+  if (preSoftPotRead < upperSP) {//turn on green led if postion ribbon is being used
     digitalWrite(gLed, LOW);
   }
-  else {
+  else {//otherwise turn it off
     digitalWrite(gLed, HIGH);
   }
 }
@@ -112,7 +111,7 @@ void readPressure(){
   //Invert the reading
   noteVelo = (1024+(pressurePotLftRead*-1))-900;
 
-  if ((noteVelo>0)&&(noteVelo<128)){//add .15 for every 1 value
+  if ((noteVelo>0)&&(noteVelo<128)){//add .15 for every 1 value. Do this because it scales well, probably a better way
     noteVelo = noteVelo*1.25;
   }
   if (noteVelo>127){//make sure that we dont send a value higher than 127 cause this will wrap around to 0
@@ -122,15 +121,20 @@ void readPressure(){
     noteVelo = 0;
   }
   
-  if (pressurePotLftRead <= lowerPrTr){
+  if (noteVelo != prevNoteVelo) {//only send an update if a change is detected in the pressure
+    MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
+    prevNoteVelo = noteVelo;
+  }
+
+  if (pressurePotLftRead <= lowerPrTr){//turn on the red led if the left pressure pad is being used
     digitalWrite(rLed, LOW);
   }
   else {
-    digitalWrite(rLed, HIGH);
+    digitalWrite(rLed, HIGH);//otherwise turn it off
   }
 }
 
-/*Unused at the moment but it did convert a pressure reading into a pitch bend command but not used for pitch bending
+/*Unused at the moment but it did convert a pressure resistor reading into a pitch bend command but not used for pitch bending
 void readPressureRht(){
   pressurePotRhtRead = analogRead(pressurePotPinRht);
   //Invert the reading
@@ -155,17 +159,18 @@ void readPressureRht(){
 
 
 void readModWheel(){
-  pressurePotRhtRead = analogRead(pressurePotPinRht);
+  pressurePotRhtRead = analogRead(pressurePotPinRht);//read the right pressure pad
   pressurePotRhtRead = ((pressurePotRhtRead/8)*-1)+127;//the original reading starts from 1024 and with pressure decreases to 0, we need it the other way round and inly with a max of 127
   if (pressurePotRhtRead != prevPressurePotRhtRead){//prevent sending infinate MIDI messages and only message when there is a change
-    if (pressurePotRhtRead >2){
-      MIDI.sendControlChange(1, pressurePotRhtRead, 1);
-      prevPressurePotRhtRead = pressurePotRhtRead;
+    if (pressurePotRhtRead >2){//dont send if there is a small change, this reading can be caused by changes in the other resistor values
+      MIDI.sendControlChange(1, pressurePotRhtRead, 1);//send modulation command
+      prevPressurePotRhtRead = pressurePotRhtRead;//make the prev reading the same as the current one so to fail the check until the readings change
     }
   }
 }
 
 void loop() {//the juice of the program
+  delay(10);//dame as the delay further down, reduces MIDI messages, they also wont add since the 2 loops happen seperatly
   readPressure();//get the pressure
   readPosition();//get position value
   readModWheel();//get and send the right pressure pad through mod cmd
@@ -195,7 +200,9 @@ void loop() {//the juice of the program
     softPotReading = preSoftPotRead/sectionSize;//divide the reading by sectionSize to fit bigger 'sections' on the ribbon 
     noteNum = noteNumList[softPotReading];//get the actual midi note number to send
 
-    readPressure();//get pressure
+    pressurePotRhtRead = analogRead(pressurePotPinRht);//this next section fixes an issue where if the right pressure pad was released to quickly the value would not always return to 0
+    pressurePotRhtRead = ((pressurePotRhtRead/8)*-1)+127;//the original reading starts from 1024 and with pressure decreases to 0, we need it the other way round and inly with a max of 127
+    MIDI.sendControlChange(1, pressurePotRhtRead, 1);
 
     MIDI.sendNoteOn(noteNum, 127, 1);//send the currently playing note
 
@@ -209,7 +216,7 @@ void loop() {//the juice of the program
       readPressure();//get the pressure
       readModWheel();//get and send the right pressure pad through mod cmd
 
-      MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
+      //MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
 
       delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference
 
