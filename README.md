@@ -22,12 +22,18 @@ Initially I did have another pressure ribbon ontop of the position ribbon but th
 There is probably a way around this but this was an easier way of doing it.
 
 There are 2 pressure pads used, the left one for activating the controller AND sending the aftertouch MIDI command.
-The tight one sends the modulation MIDI command.
+The right one sends the modulation MIDI command.
 
-You can change the use case but I have the aftertouch hooked up to the vibroto and the modulation hooked up to the ADSR module to change the time required to get up to and lose volume.
+You can change the use case but I have the aftertouch hooked up to the vibroto and the modulation hooked up to the ADSR module to change the time required to increase and decrease volume.
 
 Using the buttons onboard the MIDI shield I have also connected them to VCV rack thorugh the Start, Stop and Continue MIDI commands.
 ![Physical to VCV](https://github.com/CraCaNN/AR2M/blob/main/AR2M%20physc%20to%20vcv.drawio.png)
 
 
 I have included the patch that I have created to work with the AR2M controller
+
+# Arduino Uploading
+1. Download the AR2M folder and open in Arduino.
+2. Make sure you have the [MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) downloaded via the Arduino library manager, not the MIDI USB library.
+3. Make sure that the switch on the MIDI shield is set to program otherwise the upload will fail!
+4. Select your Arduino and upload.
