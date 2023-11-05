@@ -57,7 +57,6 @@ int prevNoteNum = 0;//the previous note that was played
 int noteVelo = 0;//The reading given by the pressure ribbon, currently programmed to output through the MIDI aftertouch command
 int prevNoteVelo = 0;//Prevent sending the same pressure commands
 
-
 //this is all of the non sharp notes from C2 to around C6
 const int noteNumListNoSharp[] = {36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91};//0
 //I would recommend using the quantiser offset or Octave offset in VCV to get the key desired to play in rather than altering the controller
@@ -65,14 +64,11 @@ const int noteNumListNoSharp[] = {36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55
 //These are all of the notes from A0. The sharp notes on the ribbon didnt sound right to me with the slew limiter on VCV but its probably because im not skilled enough
 const int noteNumListSharp[] = {21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96};//1
 int noteListSelect = 0;
-//int noteNumList[] = {36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91};
 
 bool isOff = true;//Used to determine the status of the controller for the leds and to prevent the main loop from spamming MIDI off messages
-bool isRhtPadOff = true;
+bool isLftPadOff = true;//Used for red LED indication if left pad is in use
 
-//LED Data
-int ribbonPwmPin = 10;
-int leftPadPwmPin = 11;
+int count = 0;//needed to flash the red LED if the left pad isn't needed to play music
 
 #include <MIDI.h>
 MIDI_CREATE_DEFAULT_INSTANCE();//I think this configures the serial output to be used for MIDI instead of serial
@@ -95,9 +91,6 @@ void setup() {
   digitalWrite(softpotPin, HIGH);
   digitalWrite(pressurePotPinLft, HIGH);
   digitalWrite(pressurePotPinRht, HIGH);
-
-  pinMode(ribbonPwmPin, OUTPUT);
-  pinMode(leftPadPwmPin, OUTPUT);
 
   //setup LEDs
   pinMode(lwLed, OUTPUT);
@@ -151,7 +144,7 @@ void readPressure(){
     MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
     prevNoteVelo = noteVelo;
   }
-
+  
   if (isPadRequired == true){//turn this off if the pad isnt needed for note sends
     if (pressurePotLftRead <= lowerPrTr){//turn on the red led if the left pressure pad is being used
       digitalWrite(rLed, LOW);
@@ -160,6 +153,7 @@ void readPressure(){
       digitalWrite(rLed, HIGH);//otherwise turn it off
     }
   }
+  
 }
 
 
@@ -176,17 +170,16 @@ void readModWheel(){
   if (pressurePotRhtRead<0){//make sure we dont send anything lower than 0 cause of ^this^ issue but opposite
     pressurePotRhtRead = 0;
   }
-  //pressurePotRhtRead = ((pressurePotRhtRead/8)*-1)+127;//the original reading starts from 1024 and with pressure decreases to 0, we need it the other way round and inly with a max of 127
 
   if (pressurePotRhtRead != prevPressurePotRhtRead){//prevent sending infinate MIDI messages and only message when there is a change
     if (pressurePotRhtRead >2){//dont send if there is a small change, this reading can be caused by changes in the other resistor values
       MIDI.sendControlChange(1, pressurePotRhtRead, 1);//send modulation command
       prevPressurePotRhtRead = pressurePotRhtRead;//make the prev reading the same as the current one so to fail the check until the readings change
-      isRhtPadOff = false;
+      isLftPadOff = false;
     }
-    else if (isRhtPadOff == false){//the delay built into the program doesnt give the arduino enough time to see the right pad coming off in some cases this should solve that
+    else if (isLftPadOff == false){//the delay built into the program doesnt give the arduino enough time to see the right pad coming off in some cases this should solve that
       MIDI.sendControlChange(1, 0, 1);//send modulation command
-      isRhtPadOff = true;
+      isLftPadOff = true;
     }
   }
 }
@@ -194,26 +187,27 @@ void readModWheel(){
 void readPot0(){//programmed to read and then send MIDI CC 5 (portamento effect)
   pot0Read = analogRead(pot0)/8;
   if (pot0Read != pot0PrevRead){
-    MIDI.sendControlChange(5, pot0Read, 1);
+    MIDI.sendControlChange(16, pot0Read, 1);
     pot0PrevRead = pot0Read;
-    digitalWrite(rLed, LOW);
-    digitalWrite(gLed, LOW);
-    delay(2);//delay to prevent repeat presses
-    digitalWrite(rLed, HIGH);
-    digitalWrite(gLed, HIGH);
   }
 }
 
-void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1)
+void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), may change this later
   pot1Read = analogRead(pot1)/8;
   if (pot1Read != pot1PrevRead){
-    MIDI.sendControlChange(91, pot1Read, 1);
+    MIDI.sendControlChange(17, pot1Read, 1);
     pot1PrevRead = pot1Read;
-    digitalWrite(rLed, LOW);
-    digitalWrite(gLed, LOW);
-    delay(2);//delay to prevent repeat presses
-    digitalWrite(rLed, HIGH);
-    digitalWrite(gLed, HIGH);
+  }
+}
+
+void rhtPadOffFlash(){
+  count++;
+  if (count == 25) {
+    digitalWrite(7,LOW);
+  }
+  if (count == 50){
+    digitalWrite(7,HIGH);
+    count = 0;
   }
 }
 
@@ -249,6 +243,9 @@ void music() {//put the main part of the code in a loop so I can control the sta
       noteNum = noteNumListSharp[softPotReading]+offSetSharp;//get the actual midi note number to send
     }
     
+    rhtPadOffFlash();
+    readPot0();
+    readPot1();
     readPressure();//get the pressure
     readModWheel();//get and send the right pressure pad through mod cmd
     //MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
@@ -280,7 +277,7 @@ void music() {//put the main part of the code in a loop so I can control the sta
 }
 
 void loop() {//the juice of the program
-  delay(10);//dame as the delay further down, reduces MIDI messages, they also wont add since the 2 loops happen seperatly
+  delay(10);//same as the delay in music function, reduces MIDI messages, they also wont add since the 2 loops happen seperatly
   readPressure();//get the pressure
   readPosition();//get position value
   readModWheel();//get and send the right pressure pad through mod cmd
@@ -299,7 +296,7 @@ void loop() {//the juice of the program
   }
   midBtnSts = digitalRead(midBtn);
 
-  if (midBtnSts == LOW){
+  if (midBtnSts == LOW){//enables/disables the reqiuirement for the left pad to be in use to play music
     if (isPadRequired == true){
       isPadRequired = false;
     }
@@ -307,11 +304,6 @@ void loop() {//the juice of the program
       isPadRequired = true;
     }
     delay(200);//delay to prevent repeat presses
-    digitalWrite(rLed, HIGH);
-    digitalWrite(gLed, HIGH);
-  }
-  if (isPadRequired == false) {
-    digitalWrite(rLed, LOW);
   }
 
   lftBtnSts = digitalRead(lftBtn);
@@ -328,12 +320,15 @@ void loop() {//the juice of the program
     }
     delay(200);//delay to prevent repeat presses
   }
+  
+
   if (isPadRequired == true){
     while((pressurePotLftRead <lowerPrTr) && (preSoftPotRead <upperSP)) {//If both the pressure pad and postion ribon are in use then play some music!!!
       music();
     }
   }
   else{
+    rhtPadOffFlash();//flash red LED to show that the pad isn't required
     while(preSoftPotRead <upperSP){
       music();
     }
