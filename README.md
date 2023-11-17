@@ -9,7 +9,9 @@ This project is made up of the following:
 * 1x Sparkfun MIDI Shield
 * For the Sparkfun MIDI Shield I would recommend getting passthough headers instead of the standard ones.
 
-I have designed this project around the useage of VCV Rack 2, but since MIDI is used, you can use this with a keyboard or whatever you want that supports MIDI.
+~~I have designed this project around the useage of VCV Rack 2~~ 
+
+VCV Rack was used but I would now recommend using [Surge XT](https://surge-synthesizer.github.io/ "Surge XT") since it comes with built in profiles and has a free VST/CLAP plugin for DAWs, but since MIDI is used, you can use this with a keyboard or whatever you want that supports MIDI.
 
 Unlike Wintergatans Modulin you will need 2 hands to play the controller 1 for the positional ribbon and 1 to activate the controller.
 
