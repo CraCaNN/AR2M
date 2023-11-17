@@ -28,11 +28,7 @@ The right one sends the modulation MIDI command.
 
 You can change the use case but I have the aftertouch hooked up to the vibroto and the modulation hooked up to the ADSR module to change the time required to increase and decrease volume.
 
-Using the buttons onboard the MIDI shield I have also connected them to VCV rack thorugh the Start, Stop and Continue MIDI commands.
-![Physical to VCV](https://github.com/CraCaNN/AR2M/blob/main/AR2M%20physc%20to%20vcv.drawio.png)
-
-
-I have included the patch that I have created to work with the AR2M controller
+I have included the VCV patch that I have created to work with the AR2M controller
 
 # Arduino Uploading
 1. Download the AR2M folder and open in Arduino.
