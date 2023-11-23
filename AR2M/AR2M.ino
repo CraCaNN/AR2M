@@ -117,10 +117,10 @@ void setup() {
 void readPosition(){
   preSoftPotRead = analogRead(softpotPin);//get position value
   if (preSoftPotRead < upperSP) {//turn on green led if postion ribbon is being used
-    digitalWrite(gLed, LOW);
+    digitalWrite(rLed, LOW);
   }
   else {//otherwise turn it off
-    digitalWrite(gLed, HIGH);
+    digitalWrite(rLed, HIGH);
   }
 }
 
@@ -133,12 +133,7 @@ void readPressure(){
   if ((noteVelo>0)&&(noteVelo<128)){//add .25 for every 1 value. Do this because it scales well, map command is better but it isnt broke
     noteVelo = noteVelo*1.25;
   }
-  if (noteVelo>127){//make sure that we dont send a value higher than 127 cause this will wrap around to 0
-    noteVelo = 127;
-  }
-  if (noteVelo<0){//make sure we dont send anything lower than 0 cause of ^this^ issue but opposite
-    noteVelo = 0;
-  }
+  noteVelo = constrain(noteVelo, 0, 127);//dont go under 0 or over 127 otherwise it will wrap around
   
   if (noteVelo != prevNoteVelo) {//only send an update if a change is detected in the pressure
     MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
@@ -147,10 +142,10 @@ void readPressure(){
   
   if (isPadRequired == true){//turn this off if the pad isnt needed for note sends
     if (pressurePotLftRead <= lowerPrTr){//turn on the red led if the left pressure pad is being used
-      digitalWrite(rLed, LOW);
+      analogWrite(gLed, (noteVelo*-1)+127);
     }
     else {
-      digitalWrite(rLed, HIGH);//otherwise turn it off
+      digitalWrite(gLed, HIGH);//otherwise turn it off
     }
   }
   
@@ -161,15 +156,10 @@ void readModWheel(){
   pressurePotRhtRead = analogRead(pressurePotPinRht);//read the right pressure pad
   pressurePotRhtRead = (1024+(pressurePotRhtRead*-1))-900;
 
-  if ((pressurePotRhtRead>0)&&(pressurePotRhtRead<128)){//add .25 for every 1 value. Do this because it scales well, map command is better but it isnt broke
-    pressurePotRhtRead = pressurePotRhtRead*1.25;
+  if ((pressurePotRhtRead>0)&&(pressurePotRhtRead<128)){
+    pressurePotRhtRead = pressurePotRhtRead*1.25;//add .25 for every 1 value. Do this because it scales well, map command is better but it isnt broke
   }
-  if (noteVelo>127){//make sure that we dont send a value higher than 127 cause this will wrap around to 0
-    pressurePotRhtRead = 127;
-  }
-  if (pressurePotRhtRead<0){//make sure we dont send anything lower than 0 cause of ^this^ issue but opposite
-    pressurePotRhtRead = 0;
-  }
+  pressurePotRhtRead = constrain(pressurePotRhtRead, 0,127);//dont go under 0 or over 127 otherwise it will wrap around
 
   if (pressurePotRhtRead != prevPressurePotRhtRead){//prevent sending infinate MIDI messages and only message when there is a change
     if (pressurePotRhtRead >2){//dont send if there is a small change, this reading can be caused by changes in the other resistor values
@@ -203,10 +193,15 @@ void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), 
 void rhtPadOffFlash(){
   count++;
   if (count == 25) {
-    digitalWrite(7,LOW);
+    digitalWrite(gLed,HIGH);
   }
   if (count == 50){
-    digitalWrite(7,HIGH);
+    if (noteVelo == 0){
+      analogWrite(gLed,(noteVelo*-1)+127);
+    }
+    else{
+      digitalWrite(gLed, LOW);
+    }
     count = 0;
   }
 }
@@ -250,7 +245,7 @@ void music() {//put the main part of the code in a loop so I can control the sta
     readModWheel();//get and send the right pressure pad through mod cmd
     //MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
 
-    delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference
+    delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable 
     if (isPadRequired == true){
       if ((pressurePotLftRead > lowerPrTr) || (preSoftPotRead >upperSP)){//if the pressure reading OR the soft pot reading is not being used break...
         break;
