@@ -11,9 +11,13 @@ This project is made up of the following:
 
 ~~I have designed this project around the useage of VCV Rack 2~~ 
 
-VCV Rack was used but I would now recommend using [Surge XT](https://surge-synthesizer.github.io/ "Surge XT") since it comes with built in profiles and has a free VST/CLAP plugin for DAWs, but since MIDI is used, you can use this with a keyboard or whatever you want that supports MIDI.
+VCV Rack was used but I would now recommend using [Surge XT](https://surge-synthesizer.github.io/ "Surge XT Homepage") since it comes with built in profiles and has a free VST/CLAP plugin for DAWs, but since MIDI is used, you can use this with a keyboard or whatever you want that supports MIDI.
 
-Unlike Wintergatans Modulin you will need 2 hands to play the controller 1 for the positional ribbon and 1 to activate the controller.
+You can play this instrument using one hand on just the ribbon like Wintergatans Modulin (Mode 2) but I would recommend suing the pads at the end of the MIDI stick (Mode 1) since the ribbon can get false readings when you touch the ribbon.
+
+Mode 1 requires both the ribbon and the left pressure pad to be touched in order to play notes. I would choose the note on the ribbon then activate the ribbon using the left pad since this prevents false readings. This is the default mode.
+Mode 2 only needs the ribbon to be touched in order to play, the left pad does still work in this mode and just acts as the MIDI channel pressure. This does work but I would recommend applying pressure quickly to the ribbon and quickly off since this prevents a lot of flase readings.
+You can toggle this behaviour with the middle button on the MIDI shield or you can set the default mode in the options section of the code.
 
 ![AR2M Layout](https://raw.githubusercontent.com/CraCaNN/AR2M/main/AR2M%20diagram.png)
 
