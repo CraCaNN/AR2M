@@ -1,11 +1,14 @@
 //Options//
 //Position ribbon
-const int sectionSize = 32;//change the 'size' of the note sections on the ribbon
+const int sectionSize = 32;//change the 'size' of the note sections on the ribbon. This does not take into account the variable below\/
 const int upperSP = 920;//set the position where the position ribbon to ignore, this works for my soft pot (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
 
 int offSetSharp = 27;//off set for sharp notes
 
 bool isPadRequired = true;//Set to false if you want to play music with just the ribbon can be toggled on or off using the middle button in the MIDI shield, can still be used for aftertouch
+
+bool inNotePitch = true;//Enables or disables the pitch bend effect within each note section
+int countToPitch = 50;//How long the program will count before allowing pitch bend. NOT IN ms.
 
 //Pressure ribbon
 const int lowerPrTr = 920; //set the minimum amount of pressure needed for the pressure ribon to activate
@@ -51,6 +54,8 @@ int rLed = 7;//Red LED
 int lwLed = 9;//left white LED
 int rwLed = 8;//right white LED
 
+int bLed = 10;//blue led for pitch bend indicator
+
 int noteNum = 0;//The note to play now
 int prevNoteNum = 0;//the previous note that was played
 
@@ -69,6 +74,22 @@ bool isOff = true;//Used to determine the status of the controller for the leds 
 bool isLftPadOff = true;//Used for red LED indication if left pad is in use
 
 int count = 0;//needed to flash the red LED if the left pad isn't needed to play music
+
+//Variables for in note pitch shift, settings can be found at top of program
+int sectionSizeRange = 1024/sectionSize;//Get the total number of possible positions within one note section 
+int pitchCount = 0;//count to incrament until matched with countToPitch
+int inNotePos = 0;//remember the inital position
+bool hasPitchBendStarted = false;//to help determine the status of pitch bending
+int pitchBendValue = 0;//amount to pitch bend by
+
+//Variables for //pitchSmooth
+int pitchToZero = 0;
+
+
+//for fancy pitch toggle
+int pCount = 0;
+bool pUp = true;
+int pitchBendValueStored = 0;
 
 #include <MIDI.h>
 MIDI_CREATE_DEFAULT_INSTANCE();//I think this configures the serial output to be used for MIDI instead of serial
@@ -97,10 +118,12 @@ void setup() {
   pinMode(rwLed, OUTPUT);
   pinMode(gLed, OUTPUT);//the LEDs onboard the MIDI shield have there on/off state flipped so High is off and Low is on, for some reason
   pinMode(rLed, OUTPUT);
+  pinMode(bLed, OUTPUT);
 
   digitalWrite(lwLed, HIGH);
   digitalWrite(gLed, HIGH);
   digitalWrite(rLed, LOW);
+  digitalWrite(bLed, HIGH);
   //flash LEDs to show power on
   delay (500);
   digitalWrite(rwLed, HIGH);
@@ -112,6 +135,9 @@ void setup() {
   digitalWrite(lwLed, HIGH);
   digitalWrite(gLed, HIGH);
   digitalWrite(rLed, HIGH);
+  if (inNotePitch == true) {
+    analogWrite(bLed, 1);
+  }
 }
 
 void readPosition(){
@@ -206,6 +232,42 @@ void rhtPadOffFlash(){
   }
 }
 
+
+void pitchBend() {//Code responsible for pitch bending
+  //ToDo: add an indication on the LED to show that the putch bend has been enabled 
+  if (inNotePitch == true) {//only run if inNotePitch is set to true, skip if false
+    //Because a delay would prevent me from changing notes i need to count up to a variable to match another this allows me to wait and still use the controller whilst this is happening. Same concept behind the red led flash 
+    if (noteNum == prevNoteNum) {
+      pitchCount++;
+    }//no need to reset counter as this will be done as part of the main music loop in switching notes
+    if (pitchCount >= countToPitch) {//if the same note has been played for a certain period of time, enable pitch bending
+      analogWrite(bLed, 25);
+      if (hasPitchBendStarted == false){
+        inNotePos = preSoftPotRead;
+        hasPitchBendStarted = true;
+      }
+      pitchBendValue = inNotePos - preSoftPotRead; //Takes the difference from the starting point in each note and compares it to the current position
+      pitchBendValueStored = pitchBendValue;//need this to smooth out any changes in pitch between notes
+      MIDI.sendPitchBend(0-constrain(pitchBendValue*500, -6500, 6500), 1);//idk how big this number needs to be multiplied by
+    }
+  }
+}
+
+void pitchSmooth() {//Theres no good order to turn off the pitch bend in between notes so this function will smooth out any pitch bend that has been applied to any notes
+  if (hasPitchBendStarted == false) {//if pitch bending isnt active, send pitch values to smooth out transitions
+    if (pitchBendValueStored != 0) {//if pitch bend is at 0 then there is no more corrections to make
+      if (pitchBendValueStored < 0) {
+        pitchBendValueStored++;
+        MIDI.sendPitchBend(0-pitchBendValueStored, 1);
+      }
+      else {
+        pitchBendValueStored--;
+        MIDI.sendPitchBend(0-pitchBendValueStored, 1);
+      }
+    }
+  }
+}
+
 void music() {//put the main part of the code in a loop so I can control the start behaviour
   if (isOff == true) {
     isOff = false;
@@ -237,58 +299,111 @@ void music() {//put the main part of the code in a loop so I can control the sta
     else {
       noteNum = noteNumListSharp[softPotReading]+offSetSharp;//get the actual midi note number to send
     }
-    
+    pitchBend();
+    pitchSmooth();
     rhtPadOffFlash();
     readPot0();
     readPot1();
     readPressure();//get the pressure
     readModWheel();//get and send the right pressure pad through mod cmd
-    //MIDI.sendAfterTouch(noteVelo, 1);//Send the pressure reading through aftertouch
 
-    delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable 
+    delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable when playing
     if (isPadRequired == true){
       if ((pressurePotLftRead > lowerPrTr) || (preSoftPotRead >upperSP)){//if the pressure reading OR the soft pot reading is not being used break...
+        hasPitchBendStarted = false;
+        pitchBendValue = 0;
+        pitchCount = 0;
+        inNotePos = 0;
+        if (inNotePitch == true) {
+          analogWrite(bLed, 1);
+        }
         break;
       }
       else if (noteNum != prevNoteNum) {//if the notes have changed and both fingers are on the pressure pad and position ribbon then 
-        
+        pitchSmooth();
         MIDI.sendNoteOn(noteNum, 127, 1);//send the new note on FIRST then 
-        MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, this solves an unwanted retrigger issue in VCV Rack and alows proper behaviour of slew
+        MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, allows for gapless playing since I cant send a new note at the same time im turning off a note
+        hasPitchBendStarted = false;
+        pitchBendValue = 0;
+        pitchCount = 0;
+        inNotePos = 0;
+        if (inNotePitch == true) {
+          analogWrite(bLed, 1);
+        }
         prevNoteNum = noteNum;//store the previous note
       }
     }
-    else if (isPadRequired == false){//when playing on ribbon only mode get rid of the additional check of the left pad 
-      if (preSoftPotRead >upperSP){//if the pressure reading OR the soft pot reading is not being used break...
-        break;
+    else if (isPadRequired == false){//when playing on ribbon only mode ignore the additional check of the left pad 
+      if (preSoftPotRead >upperSP){//if the soft pot reading is not being used break...
+        hasPitchBendStarted = false;
+        pitchBendValue = 0;
+        pitchCount = 0;
+        inNotePos = 0;
+        if (inNotePitch == true) {
+          analogWrite(bLed, 1);
+        }
+        break;//maybe put the break statements in a function
       }
-      else if (noteNum != prevNoteNum) {//if the notes have changed and both fingers are on the pressure pad and position ribbon then 
-        
+      else if (noteNum != prevNoteNum) {//if the notes have changed then 
+        hasPitchBendStarted = false;
+        pitchBendValue = 0;
+        pitchCount = 0;
+        inNotePos = 0;
+        if (inNotePitch == true) {
+          analogWrite(bLed, 1);
+        }
         MIDI.sendNoteOn(noteNum, 127, 1);//send the new note on FIRST then 
-        MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, this solves an unwanted retrigger issue in VCV Rack and alows proper behaviour of slew
+        MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, allows for gapless playing since I cant send a new note at the same time im turning off a note
+        pitchSmooth();
         prevNoteNum = noteNum;//store the previous note
       }
     }
   }
 }
 
-void loop() {//the juice of the program
+void loop() {//The main loop itself doesn't play any music, it does instead control the start behaviour of what plays music
   delay(10);//same as the delay in music function, reduces MIDI messages, they also wont add since the 2 loops happen seperatly
   readPressure();//get the pressure
   readPosition();//get position value
   readModWheel();//get and send the right pressure pad through mod cmd
   readPot0();
   readPot1();
+  pitchSmooth();
 
   //check for button presses
   rhtBtnSts = digitalRead(rhtBtn);
-  if (rhtBtnSts == LOW){
-    MIDI.sendStart();//send command
-    digitalWrite(rLed, LOW);
-    digitalWrite(gLed, LOW);
-    delay(200);//delay to prevent repeat presses
-    digitalWrite(rLed, HIGH);
-    digitalWrite(gLed, HIGH);
+  if (rhtBtnSts == LOW){//enables/disables the in-note pitch bend
+    if (inNotePitch == true) {
+      inNotePitch = false;
+    }
+    else {
+      inNotePitch = true;
+    }
+    while (pCount != 255) {//Fancy indicator to show button press
+      pCount++;
+      analogWrite(bLed, pCount);
+      delay(1);
+    }
+    while (pCount != 0) {
+      pCount--;
+      analogWrite(bLed, pCount);
+      delay(1);
+    }
+    while (pCount != 255) {
+      pCount++;
+      analogWrite(bLed, pCount);
+      delay(1);
+    }
+    while (pCount != 0) {
+      pCount--;
+      analogWrite(bLed, pCount);
+      delay(1);
+    }
+    if (inNotePitch == true) {
+          analogWrite(bLed, 1);
+        }
   }
+
   midBtnSts = digitalRead(midBtn);
 
   if (midBtnSts == LOW){//enables/disables the reqiuirement for the left pad to be in use to play music
@@ -302,7 +417,7 @@ void loop() {//the juice of the program
   }
 
   lftBtnSts = digitalRead(lftBtn);
-  if (lftBtnSts == LOW){
+  if (lftBtnSts == LOW){//Changes to use the whole key from C to C including sharps and not just the notes within C
     if (noteListSelect == 0){
       noteListSelect = 1;
       digitalWrite(rwLed, HIGH);
@@ -330,8 +445,9 @@ void loop() {//the juice of the program
   }
   if (isOff==false) {
     MIDI.sendNoteOff(prevNoteNum, 0, 1);//...and turn off the note.
+    //pitchSmooth();
     isOff=true;
   }
 }
 
-//Thank you to Wintergatan for the amazing music you make. When you have the time make more music even without the marble machine(s).
+//Thank you to Wintergatan for the amazing music you make and for inspiring me to make this project. When you have the time make more music even without the marble machine(s).
