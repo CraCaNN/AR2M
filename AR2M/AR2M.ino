@@ -7,7 +7,7 @@ int offSetSharp = 27;//off set for sharp notes
 
 bool isPadRequired = true;//Set to false if you want to play music with just the ribbon can be toggled on or off using the middle button in the MIDI shield, can still be used for aftertouch
 
-bool inNotePitch = true;//Enables or disables the pitch bend effect within each note section
+bool inNotePitch = false;//Enables or disables the pitch bend effect within each note section
 int countToPitch = 50;//How long the program will count before allowing pitch bend. NOT IN ms.
 
 //Pressure ribbon
@@ -130,6 +130,7 @@ void setup() {
   digitalWrite(lwLed, LOW);
   digitalWrite(gLed, LOW);
   digitalWrite(rLed, HIGH);
+  digitalWrite(bLed, LOW);
   delay (500);
   digitalWrite(rwLed, LOW);
   digitalWrite(lwLed, HIGH);
@@ -200,6 +201,7 @@ void readModWheel(){
   }
 }
 
+
 void readPot0(){//programmed to read and then send MIDI CC 5 (portamento effect)
   pot0Read = analogRead(pot0)/8;
   if (pot0Read != pot0PrevRead){
@@ -208,6 +210,7 @@ void readPot0(){//programmed to read and then send MIDI CC 5 (portamento effect)
   }
 }
 
+
 void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), may change this later
   pot1Read = analogRead(pot1)/8;
   if (pot1Read != pot1PrevRead){
@@ -215,6 +218,7 @@ void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), 
     pot1PrevRead = pot1Read;
   }
 }
+
 
 void rhtPadOffFlash(){
   count++;
@@ -234,7 +238,6 @@ void rhtPadOffFlash(){
 
 
 void pitchBend() {//Code responsible for pitch bending
-  //ToDo: add an indication on the LED to show that the putch bend has been enabled 
   if (inNotePitch == true) {//only run if inNotePitch is set to true, skip if false
     //Because a delay would prevent me from changing notes i need to count up to a variable to match another this allows me to wait and still use the controller whilst this is happening. Same concept behind the red led flash 
     if (noteNum == prevNoteNum) {
@@ -248,11 +251,12 @@ void pitchBend() {//Code responsible for pitch bending
       }
       pitchBendValue = inNotePos - preSoftPotRead; //Takes the difference from the starting point in each note and compares it to the current position
       pitchBendValueStored = pitchBendValue;//need this to smooth out any changes in pitch between notes
-      MIDI.sendPitchBend(0-constrain(pitchBendValue*500, -6500, 6500), 1);//idk how big this number needs to be multiplied by
+      MIDI.sendPitchBend(0-constrain(pitchBendValue*100, -6500, 6500), 1);
     }
   }
 }
 
+/*No longer needed
 void pitchSmooth() {//Theres no good order to turn off the pitch bend in between notes so this function will smooth out any pitch bend that has been applied to any notes
   if (hasPitchBendStarted == false) {//if pitch bending isnt active, send pitch values to smooth out transitions
     if (pitchBendValueStored != 0) {//if pitch bend is at 0 then there is no more corrections to make
@@ -267,11 +271,9 @@ void pitchSmooth() {//Theres no good order to turn off the pitch bend in between
     }
   }
 }
+*/
 
-void music() {//put the main part of the code in a loop so I can control the start behaviour
-  if (isOff == true) {
-    isOff = false;
-  }
+void noteSelect() {
   preSoftPotRead = analogRead(softpotPin);//read ribbon value value
   softPotReading = preSoftPotRead/sectionSize;//divide the reading by sectionSize to fit bigger 'sections' on the ribbon 
   if (noteListSelect == 0){
@@ -280,6 +282,13 @@ void music() {//put the main part of the code in a loop so I can control the sta
   else {
     noteNum = noteNumListSharp[softPotReading]+offSetSharp;//get the actual midi note number to send
   }
+}
+
+void music() {//put the main part of the code in a function seperate from the main loop so I can control the start behaviour a bit easier
+  if (isOff == true) {
+    isOff = false;
+  }
+  noteSelect();//get note
   
 
   pressurePotRhtRead = analogRead(pressurePotPinRht);//this next section fixes an issue where if the right pressure pad was released to quickly the value would not always return to 0
@@ -291,25 +300,18 @@ void music() {//put the main part of the code in a loop so I can control the sta
   prevNoteNum = noteNum;//make the notes the same to prevent the break condition later 
 
   while(true){//keep checking the ribon position hasn't changed so we can keep the note ON WITHOUT sending infinate note on/off commands
-    preSoftPotRead = analogRead(softpotPin);//read ribbon value value
-    softPotReading = preSoftPotRead/sectionSize;//divide the reading by sectionSize to fit bigger 'sections' on the ribbon 
-    if (noteListSelect == 0){
-      noteNum = noteNumListNoSharp[softPotReading];//get the actual midi note number to send
-    }
-    else {
-      noteNum = noteNumListSharp[softPotReading]+offSetSharp;//get the actual midi note number to send
-    }
+    noteSelect();//get note
+
     pitchBend();
-    pitchSmooth();
     rhtPadOffFlash();
-    readPot0();
-    readPot1();
     readPressure();//get the pressure
     readModWheel();//get and send the right pressure pad through mod cmd
+    readPot0();
+    readPot1();
 
     delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable when playing
     if (isPadRequired == true){
-      if ((pressurePotLftRead > lowerPrTr) || (preSoftPotRead >upperSP)){//if the pressure reading OR the soft pot reading is not being used break...
+      if ((pressurePotLftRead > lowerPrTr) || (preSoftPotRead >upperSP)){//if the pressure reading OR the soft pot reading is not being used reset pitch bend stuff and break...
         hasPitchBendStarted = false;
         pitchBendValue = 0;
         pitchCount = 0;
@@ -320,20 +322,29 @@ void music() {//put the main part of the code in a loop so I can control the sta
         break;
       }
       else if (noteNum != prevNoteNum) {//if the notes have changed and both fingers are on the pressure pad and position ribbon then 
-        pitchSmooth();
-        MIDI.sendNoteOn(noteNum, 127, 1);//send the new note on FIRST then 
-        MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, allows for gapless playing since I cant send a new note at the same time im turning off a note
-        hasPitchBendStarted = false;
-        pitchBendValue = 0;
-        pitchCount = 0;
-        inNotePos = 0;
-        if (inNotePitch == true) {
+        if ((inNotePitch == true) && (hasPitchBendStarted == true)) {
+          MIDI.sendNoteOff(prevNoteNum, 0, 1);
+          MIDI.sendPitchBend(0,1);
+          MIDI.sendNoteOn(noteNum, 127, 1); 
+          
+          hasPitchBendStarted = false;
+          pitchBendValue = 0;
+          pitchCount = 0;
+          inNotePos = 0;
           analogWrite(bLed, 1);
+        }
+        else {
+          MIDI.sendNoteOn(noteNum, 127, 1);//send the new note on FIRST then 
+          MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, allows for gapless playing since I cant send a new note at the same time im turning off a note
+          hasPitchBendStarted = false;
+          pitchBendValue = 0;
+          pitchCount = 0;
+          inNotePos = 0;
         }
         prevNoteNum = noteNum;//store the previous note
       }
     }
-    else if (isPadRequired == false){//when playing on ribbon only mode ignore the additional check of the left pad 
+    else if (isPadRequired == false){//when playing on ribbon only mode, ignore the additional check of the left pad 
       if (preSoftPotRead >upperSP){//if the soft pot reading is not being used break...
         hasPitchBendStarted = false;
         pitchBendValue = 0;
@@ -354,7 +365,7 @@ void music() {//put the main part of the code in a loop so I can control the sta
         }
         MIDI.sendNoteOn(noteNum, 127, 1);//send the new note on FIRST then 
         MIDI.sendNoteOff(prevNoteNum, 0, 1);//turn off the previous one, allows for gapless playing since I cant send a new note at the same time im turning off a note
-        pitchSmooth();
+        //pitchSmooth();
         prevNoteNum = noteNum;//store the previous note
       }
     }
@@ -368,7 +379,8 @@ void loop() {//The main loop itself doesn't play any music, it does instead cont
   readModWheel();//get and send the right pressure pad through mod cmd
   readPot0();
   readPot1();
-  pitchSmooth();
+  //pitchSmooth();
+  //pot1TimeToBend();
 
   //check for button presses
   rhtBtnSts = digitalRead(rhtBtn);
@@ -389,22 +401,13 @@ void loop() {//The main loop itself doesn't play any music, it does instead cont
       analogWrite(bLed, pCount);
       delay(1);
     }
-    while (pCount != 255) {
-      pCount++;
-      analogWrite(bLed, pCount);
-      delay(1);
-    }
-    while (pCount != 0) {
-      pCount--;
-      analogWrite(bLed, pCount);
-      delay(1);
-    }
     if (inNotePitch == true) {
           analogWrite(bLed, 1);
         }
   }
 
   midBtnSts = digitalRead(midBtn);
+
 
   if (midBtnSts == LOW){//enables/disables the reqiuirement for the left pad to be in use to play music
     if (isPadRequired == true){
@@ -445,6 +448,7 @@ void loop() {//The main loop itself doesn't play any music, it does instead cont
   }
   if (isOff==false) {
     MIDI.sendNoteOff(prevNoteNum, 0, 1);//...and turn off the note.
+    MIDI.sendPitchBend(0,1);
     //pitchSmooth();
     isOff=true;
   }
