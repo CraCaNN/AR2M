@@ -76,17 +76,12 @@ bool isLftPadOff = true;//Used for red LED indication if left pad is in use
 int count = 0;//needed to flash the red LED if the left pad isn't needed to play music
 
 //Variables for in note pitch shift, settings can be found at top of program
-int sectionSizeRange = 1024/sectionSize;//Get the total number of possible positions within one note section 
 int pitchCount = 0;//count to incrament until matched with countToPitch
 int inNotePos = 0;//remember the inital position
 bool hasPitchBendStarted = false;//to help determine the status of pitch bending
 int pitchBendValue = 0;//amount to pitch bend by
 
-//Variables for //pitchSmooth
-int pitchToZero = 0;
-
-
-//for fancy pitch toggle
+//for fancy pitch toggle indicator
 int pCount = 0;
 bool pUp = true;
 int pitchBendValueStored = 0;
@@ -195,23 +190,23 @@ void readModWheel(){
       isLftPadOff = false;
     }
     else if (isLftPadOff == false){//the delay built into the program doesnt give the arduino enough time to see the right pad coming off in some cases this should solve that
-      MIDI.sendControlChange(1, 0, 1);//send modulation command
+      MIDI.sendControlChange(1, 0, 1);//send modulation command, at a value of 0 at midi channel 1
       isLftPadOff = true;
     }
   }
 }
 
 
-void readPot0(){//programmed to read and then send MIDI CC 5 (portamento effect)
-  pot0Read = analogRead(pot0)/8;
-  if (pot0Read != pot0PrevRead){
-    MIDI.sendControlChange(16, pot0Read, 1);
-    pot0PrevRead = pot0Read;
+void readPot0(){//programmed to read and then send MIDI CC 16, general purporse 1
+  pot0Read = analogRead(pot0)/8;//divide reading by 8 since 1024/8 = 128
+  if (pot0Read != pot0PrevRead){//prevent spam by comparing previous values
+    MIDI.sendControlChange(16, pot0Read, 1);//send command
+    pot0PrevRead = pot0Read;//store previous value
   }
 }
 
 
-void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), may change this later
+void readPot1(){//programmed to read and then send MIDI CC 17 general purpose 2, exact same as above except different pot and midi CC
   pot1Read = analogRead(pot1)/8;
   if (pot1Read != pot1PrevRead){
     MIDI.sendControlChange(17, pot1Read, 1);
@@ -220,7 +215,7 @@ void readPot1(){//programmed to read and then send MIDI CC 91 (Effect Depth 1), 
 }
 
 
-void rhtPadOffFlash(){
+void pressurePadOffWarn(){//flash the green led to indicate that the left pad isnt required to play music
   count++;
   if (count == 25) {
     digitalWrite(gLed,HIGH);
@@ -256,23 +251,6 @@ void pitchBend() {//Code responsible for pitch bending
   }
 }
 
-/*No longer needed
-void pitchSmooth() {//Theres no good order to turn off the pitch bend in between notes so this function will smooth out any pitch bend that has been applied to any notes
-  if (hasPitchBendStarted == false) {//if pitch bending isnt active, send pitch values to smooth out transitions
-    if (pitchBendValueStored != 0) {//if pitch bend is at 0 then there is no more corrections to make
-      if (pitchBendValueStored < 0) {
-        pitchBendValueStored++;
-        MIDI.sendPitchBend(0-pitchBendValueStored, 1);
-      }
-      else {
-        pitchBendValueStored--;
-        MIDI.sendPitchBend(0-pitchBendValueStored, 1);
-      }
-    }
-  }
-}
-*/
-
 void noteSelect() {
   preSoftPotRead = analogRead(softpotPin);//read ribbon value value
   softPotReading = preSoftPotRead/sectionSize;//divide the reading by sectionSize to fit bigger 'sections' on the ribbon 
@@ -285,11 +263,10 @@ void noteSelect() {
 }
 
 void music() {//put the main part of the code in a function seperate from the main loop so I can control the start behaviour a bit easier
-  if (isOff == true) {
+  if (isOff == true) {//to prevent sending infinate note off commands at the end of the main loop
     isOff = false;
   }
   noteSelect();//get note
-  
 
   pressurePotRhtRead = analogRead(pressurePotPinRht);//this next section fixes an issue where if the right pressure pad was released to quickly the value would not always return to 0
   pressurePotRhtRead = ((pressurePotRhtRead/8)*-1)+127;//the original reading starts from 1024 and with pressure decreases to 0, we need it the other way round and inly with a max of 127
@@ -302,12 +279,12 @@ void music() {//put the main part of the code in a function seperate from the ma
   while(true){//keep checking the ribon position hasn't changed so we can keep the note ON WITHOUT sending infinate note on/off commands
     noteSelect();//get note
 
-    pitchBend();
-    rhtPadOffFlash();
+    pitchBend();//only runs if inNotePitch is true, off by default
+    pressurePadOffWarn();//Flashes the green led if the check for the left pressure pad is off
     readPressure();//get the pressure
     readModWheel();//get and send the right pressure pad through mod cmd
-    readPot0();
-    readPot1();
+    readPot0();//get current reading of the pot on A0
+    readPot1();//get current reading of the pot on A1
 
     delay(10);//delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable when playing
     if (isPadRequired == true){
@@ -407,8 +384,6 @@ void loop() {//The main loop itself doesn't play any music, it does instead cont
   }
 
   midBtnSts = digitalRead(midBtn);
-
-
   if (midBtnSts == LOW){//enables/disables the reqiuirement for the left pad to be in use to play music
     if (isPadRequired == true){
       isPadRequired = false;
@@ -441,7 +416,7 @@ void loop() {//The main loop itself doesn't play any music, it does instead cont
     }
   }
   else{
-    rhtPadOffFlash();//flash red LED to show that the pad isn't required
+    pressurePadOffWarn();//flash red LED to show that the pad isn't required
     while(preSoftPotRead <upperSP){
       music();
     }
