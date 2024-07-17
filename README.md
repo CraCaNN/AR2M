@@ -1,3 +1,5 @@
+# README IS CURRENTLY NOT UP TO DATE
+I will get round to it at some point, for more information look at the release notes
 # AR2M
 The AR2M (Arduino Ribbon to MIDI) controller is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
 
