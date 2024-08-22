@@ -1,37 +1,38 @@
-# README IS CURRENTLY NOT UP TO DATE
-I will get round to it at some point, for more information look at the release notes
 # AR2M
 The AR2M (Arduino Ribbon to MIDI) controller is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
 
 This project is made up of the following:
 * 1x wood plank, or something else to put the Arduino, ribbon and pressure pads on.
 * 1x 500mm soft pot
+* 1x500 or 600mm FSR ribbon
 * 2x Force Sensitive Resistors (Rated for 0-10kg)
-* 1x Arduino Uno R3
-* 1x Sparkfun MIDI Shield
-* For the Sparkfun MIDI Shield I would recommend getting passthrough headers instead of the standard ones.
+* 1x Tiny 2040 (the Tiny 2350 should work when earlephilhower has updated the board library as the pinout has been updated, will confirmn this when I can)
 
-You can play this instrument using one hand on just the ribbon like Wintergatans Modulin (Mode 2) but I would recommend using the pads at the end of the MIDI stick (Mode 1) since the ribbon can get false readings when you touch the ribbon.
+Initially I had trouble with getting the force and position ribbons working together but they now both work so you can play this instrument with one hand
+There are 2 additional force pads at the end of the instrument and control MIDI CC (control channels) 1&2
+The FSR (force sensetive resistor) sends MIDI AT (aftertouch) messages
+The total cost of parts is less than £100 although I plan on making a sellable version at somepoint, I have designed my own PCB for this
+I may sell these as kits or as compleated units
 
-Mode 1 requires both the ribbon and the left pressure pad to be touched in order to play notes. I would choose the note on the ribbon then activate the ribbon using the left pad since this prevents false readings. This is the default mode.
-Mode 2 only needs the ribbon to be touched in order to play, the left pad does still work in this mode and just acts as the MIDI channel pressure. This does work but I would recommend applying pressure quickly to the ribbon and quickly off since this prevents a lot of false readings.
-You can toggle this behaviour with the middle button on the MIDI shield or you can set the default mode in the options section of the code.
+To play without creating ghost notes you need to put your finger right on the middle of the position ribbon as lying it accross a section will result in ghost notes
 
-![AR2M Layout](https://raw.githubusercontent.com/CraCaNN/AR2M/main/AR2M%20diagram.png)
+This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/products/tiny-2040?variant=39560012300371) since they're well priced and have USB-C unlike the official Picos
 
-This is because the soft pot ribbon when lightly pressing on the ribbon the values can be read further up the ribbon than the actual position of your finger.
-To get around this I have put a pressure pad on the end of the instrument to activate the controller. 
-![Pressure end](https://github.com/CraCaNN/AR2M/blob/main/pressure%20close%20up.jpg)
-Initially I did have another pressure ribbon on top of the position ribbon, but this increased the amount of pressure required to play.
-There is probably a way around this, but this was an easier way of doing it.
+# Uploading to the Pico
 
-There are 2 pressure pads used, the left one for activating the controller AND sending the aftertouch MIDI command.
-The right one sends the modulation MIDI command.
+1. From the [releases](https://github.com/CraCaNN/AR2M/releases) on the Latest release page (or pre-release if you want to try early but possibly unstable features) download the file called `AR2M.U2F`
+2. Whilst holding the BOOT button on the controller plug the device into your computer, or whilst the controller is still on, hold the BOOT buttin then press RESET
+3. On Windows File Explorer should automatically pop up a Window with the device `RPI-RP2`. On MacOS it should appear in the smae name in File Explorer
+4. Drag the `AR2M.U2F` file into the `RPI-RP2`. The controller should then reboot and the new firmware should now be used by the controller.
 
-You can change the use case, but I have the aftertouch hooked up to the vibrato and the modulation hooked up to the ADSR of the volume to change the time required to increase and decrease volume, a bit like a sustain pedal.
-
-# Arduino Uploading
+# Compiling the Code
+For people who want to modify the code and upload this to the controller. **No support will be provided if you modify and upload the code** 
+### finish later
 1. Download the AR2M folder and open in Arduino.
 2. Make sure you have the [MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) downloaded via the Arduino library manager, not the MIDI USB library.
 3. Make sure that the switch on the MIDI shield is set to program otherwise the upload will fail!
 4. Select your Arduino and upload.
+
+# In the Future
+
+
