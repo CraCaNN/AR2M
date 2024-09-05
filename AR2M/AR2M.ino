@@ -1512,7 +1512,7 @@ void loop() {      //The main loop itself doesn't play any music, it does instea
   readPosition();  //get position value
   readModWheel();  //get and send the right pressure pad through mod cmd
 
-  while (preSoftPotRead > ribbonDeadZone) {
+  while ((pressureRibbonRead > lowerPrTr) && (preSoftPotRead > ribbonDeadZone)) {
     music();
   }
 
