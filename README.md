@@ -26,9 +26,9 @@ This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/
 4. Drag the `AR2M.U2F` file into the `RPI-RP2`. The controller should then reboot and the new firmware should now be used by the controller.
 
 # Compiling the Code
-For people who want to modify the code and upload this to the controller.
-**No support will be provided for any modified code, even if the modifications are within the settings list of variables** 
-### This guide assumes that you know the basics of Arduino and you also have Arduino IDE 2 installed
+For people who want to modify the code and upload this to the controller.\
+**No support will be provided for any modified code, even if the modifications are within the settings list of variables**\
+**This guide assumes that you know the basics of Arduino and you also have Arduino IDE 2 installed**
 1. Download the AR2M folder and open in Arduino IDE.
 2. Make sure you have the following libraries installed. All can be found by searching the names in the Arduino library manager:
 -  [MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) not the MIDI USB library.
