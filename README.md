@@ -6,7 +6,7 @@ This project is made up of the following:
 * 1x 500mm soft pot
 * 1x500 or 600mm FSR ribbon
 * 2x Force Sensitive Resistors (Rated for 0-10kg)
-* 1x Tiny 2040 (the Tiny 2350 should work when earlephilhower has updated the board library as the pinout has been updated, will confirm this when I've built a new instrument)
+* 1x Tiny 2040 (the Tiny 2350 should work when earlephilhower as the pinout is unchanged, will confirm this when I've built a new instrument using a Tiny 2350)
 
 Initially I had trouble with getting the force and position ribbons working together but they now both work so you can play this instrument with one hand
 There are 2 additional force pads at the end of the instrument and control MIDI CC (control channels) 1&2
@@ -16,12 +16,12 @@ I may sell these as kits or as completed units
 
 To play without creating ghost notes you need to put your finger right on the middle of the position ribbon as lying it accross a section will result in ghost notes
 
-This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/products/tiny-2040?variant=39560012300371) since they're well priced and have USB-C unlike the official Picos
+This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/products/tiny-2040?variant=39560012300371) since they're well priced, very compact and have USB-C unlike the official Picos
 
 # Uploading to the Pico
 
 1. From the [releases](https://github.com/CraCaNN/AR2M/releases) on the Latest release page (or pre-release if you want to try early but possibly unstable features) download the file called `AR2M.U2F`
-2. Whilst holding the BOOT button on the controller plug the device into your computer, or whilst the controller is still on, hold the BOOT buttin then press RESET
+2. Whilst holding the BOOT button on the controller plug the device into your computer, or whilst the controller is still on, hold the BOOT button then press RESET
 3. On Windows File Explorer should automatically pop up a Window with the device `RPI-RP2`. On MacOS it should appear in the smae name in File Explorer
 4. Drag the `AR2M.U2F` file into the `RPI-RP2`. The controller should then reboot and the new firmware should now be used by the controller.
 
