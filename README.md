@@ -18,28 +18,9 @@ To play without creating ghost notes you need to put your finger right on the mi
 
 This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/products/tiny-2040?variant=39560012300371) since they're well priced, very compact and have USB-C unlike the official Picos
 
-# Uploading to the Pico
-
-1. From the [releases](https://github.com/CraCaNN/AR2M/releases) on the Latest release page (or pre-release if you want to try early but possibly unstable features) download the file called `AR2M_vX.X.X.U2F`
-2. Whilst holding the BOOT button on the controller plug the device into your computer, or whilst the controller is still on, hold the BOOT button then press RESET
-3. On Windows File Explorer should automatically pop up a Window with the device `RPI-RP2`. On MacOS it should appear in the same name in Finder (I don't own a Mac so not to sure)
-4. Drag the `AR2M_vX.X.X.U2F` file into the `RPI-RP2`. The controller should then reboot and the new firmware should now be used by the controller.
+# Updating/Uploading the Controllers Firmware
+If you want to update your controller to the latest firmware, follow [this](https://github.com/CraCaNN/AR2M/wiki/Updating-the-controller) guide in the wiki
 
 # Compiling the Code
-For people who want to modify the code and upload this to the controller.\
-**No support will be provided for any modified code, even if the modifications are within the settings list of variables**\
-**This guide assumes that you know the basics of Arduino and you also have Arduino IDE 2 installed**
-1. Download the AR2M folder and open in Arduino IDE.
-2. Make sure you have the following libraries installed. All can be found by searching the names in the Arduino library manager:
--  [MIDI library](https://github.com/FortySevenEffects/arduino_midi_library) not the MIDI USB library.
--  [Adafruit SSD1306](https://github.com/adafruit/Adafruit_SSD1306)
--  [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library)
--  [Adafruit TinyUSB Library](https://github.com/adafruit/Adafruit_TinyUSB_Arduino)
-3. Install earlephilhower's Pico board by following [this](https://arduino-pico.readthedocs.io/en/latest/install.html#installing-via-arduino-boards-manager) guide
-4. Under Board Manager search `Raspberry Pi Pico`, it should show up as `Raspberry Pi Pico - Raspberry Pi Pico /RP...`, Select it. **NOT THE ONE labelled `Raspberry Pi Pico - Arduino Mbed OS RP...`**
-5. Select the Pico that's connected the computer, it will not show up properly unless you have put the Pico into BOOT mode
-6. Under Tools->USB Stack: Select `Adafruit TinyUSB`. If you do not See USB Stacks, you most likely have the wrong board selected. Check that you have selected the right board in step 4.
-7. Make any changes you want to the code and upload!
-
-## To Work On
-At some point I want to add support for an EEPROM chip. This way settings can be stored and loaded from the chip. This also means that the user can change the defaults without having to compile the code.
+For people who want to modify the code and upload this to the controller and are familiar with the Arduino language
+Follow [this](https://github.com/CraCaNN/AR2M/wiki/Compiling) guide in the Wiki
