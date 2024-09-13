@@ -124,7 +124,7 @@ int prevNoteVelo = 0;  //Prevent sending the same pressure commands
 const int noteNumberList[] = { 36, 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108 };  //C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
 //const char * noteNumNameNoSharp[] = {"C2", "C2", "D2", "E2", "F2", "G2", "A2", "B2", "C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6", "E6", "F6", "G6", "A6", "B6", "C7", "D7", "E7", "F7", "G7", "A7", "B7", "C8"};
 //the list below contains every midi note number in letter form for visualisation purposes
-const char* noteNumNameNoSharp[] = { "C-1", "C#-1", "D-1", "D#-1", "E-1", "F-1", "F#-1", "G-1", "G#-1", "A-1", "A#-1", "B-1", "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0", "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1", "C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2", "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5", "C6", "C#6", "D6", "D#6", "E6", "F6", "F#6", "G6", "G#6", "A6", "A#6", "B6", "C7", "C#7", "D7", "D#7", "E7", "F7", "F#7", "G7", "G#7", "A7", "A#7", "B7", "C8", "C#8", "D8", "D#8", "E8", "F8", "F#8", "G8", "G#8", "A8", "A#8", "B8", "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "G#9", "A9", "A#9", "B9" };
+const char* noteNumNameNoSharp[] = { "C-1", "C#-1", "D-1", "D#-1", "E-1", "F-1", "F#-1", "G-1", "G#-1", "A-1", "A#-1", "B-1", "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0", "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1", "C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2", "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5", "C6", "C#6", "D6", "D#6", "E6", "F6", "F#6", "G6", "G#6", "A6", "A#6", "B6", "C7", "C#7", "D7", "D#7", "E7", "F7", "F#7", "G7", "G#7", "A7", "A#7", "B7", "C8", "C#8", "D8", "D#8", "E8", "F8", "F#8", "G8", "G#8", "A8", "A#8", "B8", "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX" };
 const char* keyList[] = { "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B " };  //for visualisation purposes only
 
 //These are all of the notes from A0. The sharp notes on the ribbon didnt sound right to me especially with the portamento effect but its probably because im not skilled enough
@@ -180,6 +180,7 @@ int displayUpdateCount = 0;  //determines what is shown on the OLED during idle 
 int blinkPixel = false;      //one pixel on the screen blinks to show when the screen is redrawn, used to be more visable on the UNO R3 but now blinks very quickly thanks to the pico
 
 int superBreak = 0;  //Helps me get out of deep sub menus
+int menuDepth = 0;   //used to keep track of where how many levels deep im in a submenu, could be used to replace superBreak
 
 //Show the position of the ribbon as a bar
 const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
@@ -286,7 +287,7 @@ void readModWheel() {
       prevPressurePotLftRead = pressurePotLftRead;                         //make the prev reading the same as the current one so to fail the check until the readings change
     }
   } else {
-    MIDI.sendPitchBend(rawLeftPad * -4 + rawRightPad * 4, 1);
+    MIDI.sendPitchBend(rawLeftPad * -8 + rawRightPad * 8, 1);
   }
 }
 
@@ -351,6 +352,18 @@ void noteSelect() {
     noteNum2 = noteNumListSharp[softPotReading + 2] + offSetSharp;  //get the actual midi note number to send
     noteNum3 = noteNumListSharp[softPotReading + 4] + offSetSharp;  //get the actual midi note number to send
     noteNum4 = noteNumListSharp[softPotReading + 6] + offSetSharp;  //get the actual midi note number to send
+  }
+  if (noteNum > 127) {
+    noteNum = 127;
+  }
+  if (noteNum2 > 127) {
+    noteNum2 = 127;
+  }
+  if (noteNum3 > 127) {
+    noteNum3 = 127;
+  }
+  if (noteNum4 > 127) {
+    noteNum4 = 127;
   }
 }
 
@@ -1138,146 +1151,147 @@ void polySettings() {
 }
 
 //show the change key/oct settings
-void changeKey() {
-  analogWrite(rLed, 205);
-  analogWrite(gLed, 255);
-  analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
-  ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
-  while (true) {
-    display.clearDisplay();
-    drawButtons();
-    display.setCursor(0, 0);
-    display.print("Exit ------------->");
-    display.setCursor(0, 12);
-    display.print("Key: ");
-    display.print(keyList[offSetKey]);
-    display.print(" | Change ->");
-    display.setCursor(0, 24);
-    display.print("Oct: ");
-    if (octaveOffSet >= 0) {
-      display.print("+");
-    }
-    display.print(octaveOffSet);
-    display.print(" | Change ->");
-    display.display();
+void changeKeyOct() {
+  display.clearDisplay();
+  drawButtons();
+  display.setCursor(0, 0);
+  display.print("Exit ------------->");
+  display.setCursor(0, 12);
+  display.print("Key: ");
+  display.print(keyList[offSetKey]);
+  display.print(" | Change ->");
+  display.setCursor(0, 24);
+  display.print("Oct: ");
+  if (octaveOffSet >= 0) {
+    display.print("+");
+  }
+  display.print(octaveOffSet);
+  display.print(" | Change ->");
+  display.display();
+  updateButtons();
+  if (btn1Sts == LOW) {
+    buttonPressed = 1;
+    drawPressed();
     updateButtons();
-    if (btn1Sts == LOW) {
-      buttonPressed = 1;
-      drawPressed();
-      updateButtons();
-      analogWrite(rLed, 255);
-      analogWrite(gLed, 255);
-      analogWrite(bLed, 255);
-      break;
-    }
-    if (btn2Sts == LOW) {  //change key
-      buttonPressed = 2;
-      drawPressed();
-      updateButtons();
-      while (true) {
-        display.clearDisplay();
-        drawButtons();
 
-        display.setCursor(10, 0);
-        display.print("Key:");
-        display.setCursor(5, 11);
-        display.setTextSize(3);
-        display.print(keyList[offSetKey]);
-        display.setTextSize(1);
-        display.setCursor(48, 0);
-        display.print("| Exit --->");
-        display.setCursor(48, 12);
-        display.print("| Inc ---->");
-        display.setCursor(48, 24);
-        display.print("| Dec ---->");
-        display.display();
-        updateButtons();
-        if (btn1Sts == LOW) {
-          buttonPressed = 1;
-          drawPressed();
-          break;
-        }
-
-        else if (btn2Sts == LOW) {
-          buttonPressed = 2;
-
-          if (offSetKey == 11) {  //wrap around if youve reached the B
-            drawPressed();
-            offSetKey = 0;
-          } else {
-            drawPressed();
-            offSetKey++;
-          }
-        }
-
-        else if (btn3Sts == LOW) {
-          buttonPressed = 3;
-          if (offSetKey == 0) {
-            drawPressed();
-            offSetKey = 11;
-          } else {
-            drawPressed();
-            offSetKey--;
-          }
-        }
-      }
-      //break;
-    }
-    if (btn3Sts == LOW) {  //change octaves
-      buttonPressed = 3;
-      drawPressed();
-      updateButtons();
-      while (true) {
-        display.clearDisplay();
-        drawButtons();
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        display.print("Octave:");
-        display.setCursor(5, 11);
-        display.setTextSize(3);
-        if (octaveOffSet >= 0) {
-          display.print("+");
-        }
-        display.print(octaveOffSet);
-        display.setTextSize(1);
-        display.setCursor(48, 0);
-        display.print("| Exit --->");
-        display.setCursor(48, 12);
-        display.print("| Inc ---->");
-        display.setCursor(48, 24);
-        display.print("| Dec ---->");
-        display.display();
-        updateButtons();
-        display.display();
-        if (btn1Sts == LOW) {
-          buttonPressed = 1;
-          drawPressed();
-          break;
-        }
-
-        else if (btn2Sts == LOW) {
-          buttonPressed = 2;
-
-          if (octaveOffSet == 3) {  //if you allow this value to be higher the controller could wrap around to midi note number 0 assuming you are using default section size of 32
-            drawCross();
-          } else {
-            drawPressed();
-            octaveOffSet++;
-          }
-        }
-
-        else if (btn3Sts == LOW) {
-          buttonPressed = 3;
-          if (octaveOffSet == -3) {  //if you allow this value to be lower the controller could wrap around to midi note number 127
-            drawCross();
-          } else {
-            drawPressed();
-            octaveOffSet--;
-          }
-        }
-      }
+    if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
+      displayUpdateCount = 0;
+    } else {
+      displayUpdateCount = 100;
     }
   }
+  if (btn2Sts == LOW) {  //change key
+    buttonPressed = 2;
+    drawPressed();
+    updateButtons();
+    displayUpdateCount = -2;  //-2 to indicate to oledScreen to show the changeKey screen
+  }
+  if (btn3Sts == LOW) {  //change octaves
+    buttonPressed = 3;
+    drawPressed();
+    updateButtons();
+    displayUpdateCount = -3;  //-3 to indicate to oledScreen to show the changeOct screen
+  }
+}
+
+void changeKey() {
+  display.clearDisplay();
+  drawButtons();
+
+  display.setCursor(10, 0);
+  display.print("Key:");
+  display.setCursor(5, 11);
+  display.setTextSize(3);
+  display.print(keyList[offSetKey]);
+  display.setTextSize(1);
+  display.setCursor(48, 0);
+  display.print("| Exit --->");
+  display.setCursor(48, 12);
+  display.print("| Inc ---->");
+  display.setCursor(48, 24);
+  display.print("| Dec ---->");
+  display.display();
+  updateButtons();
+  if (btn1Sts == LOW) {
+    buttonPressed = 1;
+    drawPressed();
+    displayUpdateCount = -1;  //reset display count to show the normal screen
+  }
+
+  else if (btn2Sts == LOW) {
+    buttonPressed = 2;
+
+    if (offSetKey == 11) {  //wrap around if youve reached the key of B
+      drawPressed();
+      offSetKey = 0;
+    } else {
+      drawPressed();
+      offSetKey++;
+    }
+  }
+
+  else if (btn3Sts == LOW) {
+    buttonPressed = 3;
+    if (offSetKey == 0) {
+      drawPressed();
+      offSetKey = 11;
+    } else {
+      drawPressed();
+      offSetKey--;
+    }
+  }
+  updateButtons();
+}
+
+void changeOct() {
+  display.clearDisplay();
+  drawButtons();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print("Octave:");
+  display.setCursor(5, 11);
+  display.setTextSize(3);
+  if (octaveOffSet >= 0) {
+    display.print("+");
+  }
+  display.print(octaveOffSet);
+  display.setTextSize(1);
+  display.setCursor(48, 0);
+  display.print("| Exit --->");
+  display.setCursor(48, 12);
+  display.print("| Inc ---->");
+  display.setCursor(48, 24);
+  display.print("| Dec ---->");
+  display.display();
+  updateButtons();
+  display.display();
+  if (btn1Sts == LOW) {
+    buttonPressed = 1;
+    drawPressed();
+    displayUpdateCount = -1;  //reset display count to show the normal screen
+  }
+
+  else if (btn2Sts == LOW) {
+    buttonPressed = 2;
+
+    if (octaveOffSet == 3) {  //if you allow this value to be higher the controller could wrap around to midi note number 0 assuming you are using default section size of 32
+      drawCross();
+    } else {
+      drawPressed();
+      octaveOffSet++;
+    }
+  }
+
+  else if (btn3Sts == LOW) {
+    buttonPressed = 3;
+    if (octaveOffSet == -3) {  //if you allow this value to be lower the controller could wrap around to midi note number 127
+      drawCross();
+    } else {
+      drawPressed();
+      octaveOffSet--;
+    }
+  }
+  updateButtons();
 }
 
 //Draws the idle menu when the controller isn't doing anything
@@ -1364,8 +1378,8 @@ void liveInfo() {
       currentNote = noteNumListSharp[preSoftPotRead / sectionSize] + offSetSharp;
     }
 
-    if ((String(noteNumNameNoSharp[currentNote]).indexOf("#") > 0) ^ (String(noteNumNameNoSharp[currentNote]).indexOf("-") > 0)) {  //if the note contains a sharp XOR a minus then change the position of the big note
-      if (isOff == false) {                                                                                                         //if the controller is sending midi then invert the big note number
+    if (String(noteNumNameNoSharp[currentNote]).length() == 3) {  //if the note contains a sharp XOR a minus then change the position of the big note
+      if (isOff == false) {                                       //if the controller is sending midi then invert the big note number
         display.setTextSize(3);
         display.setCursor(38, 1);
         display.setTextColor(0);
@@ -1377,8 +1391,8 @@ void liveInfo() {
         display.setCursor(38, 1);
         display.print(noteNumNameNoSharp[currentNote]);
       }
-    } else if ((String(noteNumNameNoSharp[currentNote]).indexOf("#") > 0) && (String(noteNumNameNoSharp[currentNote]).indexOf("-") > 0)) {  //if the note contains a shard AND a minus tgen change the text size and reposition the big note
-      if (isOff == false) {                                                                                                                 //if the controller is sending midi then invert the big note number
+    } else if (String(noteNumNameNoSharp[currentNote]).length() == 4) {  //if the note contains a shard AND a minus then change the text size and reposition the big note
+      if (isOff == false) {                                              //if the controller is sending midi then invert the big note number
         display.setTextSize(2);
         display.setCursor(42, 5);
         display.setTextColor(0);
@@ -1448,7 +1462,7 @@ void liveInfo() {
 }
 
 //Currently not implamented due to some issue, may look at this later
-//Checks the readings to reduce "noise" in the ribbon, works as a rolling average
+//Checks the readings to reduce "noise" in the ribbon, works as a sort of rolling average
 void reCheck() {
   if (performReCheck == true) {  //only run the check if enabled
     if ((noteNum = reCheckVars[0]) && (noteNum = reCheckVars[1]) && (noteNum = reCheckVars[2]) && (noteNum = reCheckVars[3]) && (noteNum = reCheckVars[4])) {
@@ -1464,9 +1478,43 @@ void reCheck() {
   }
 }
 
-//pitch bend using the left and right pads of the instrument
-void padBend() {
+//Handles which function is called depending on different input/variable states
+void oledScreen() {
+  if (displayUpdateCount < 0) {  //check first that there isnt any negatives which indicate a special screen function
+    if (displayUpdateCount == -1) {
+      changeKeyOct();
+    } else if (displayUpdateCount == -2) {
+      changeKey();
+    } else if (displayUpdateCount == -3) {
+      changeOct();
+    }
+  } else if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
+    displayUpdateCount = 0;
+  }
+  if (debug == false) {
+    if ((displayUpdateCount >= 0) && (displayUpdateCount < 100)) {  //show the live info display a bit after the controller has finished playing notes
+      liveInfo();
+      displayUpdateCount++;
+      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
+      sleepLed = 255;          //reset sleep vars to make it neater
+      sleepLedDir = false;
+    } else if ((displayUpdateCount >= 0) && (displayUpdateCount < 1000)) {  //otherwise show the menu display
+      idleDisplay();
+      displayUpdateCount++;
+      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
+      sleepLed = 255;          //reset sleep vars to make it neater
+      sleepLedDir = false;
+    } else if ((displayUpdateCount >= 0) && (displayUpdateCount >= 1000)) {
+      display.clearDisplay();
+      display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
+      sleep();            //show blue led to indicate sleep like state
+    }
+  } else {
+    showVars();
+  }
 }
+
+
 
 //put the main music logic part of the code in a function seperate from the main loop so I can control the start behaviour a bit easier
 void music() {
@@ -1489,11 +1537,7 @@ void music() {
     readPressure();     //get the pressure
     readModWheel();     //get and send the right pressure pad through mod cmd
 
-    if (debug == false) {  //if debug is off show the normal screen
-      liveInfo();
-    } else {  //otherwise show the more advanced screen
-      showVars();
-    }
+    oledScreen();  //run OLED code
 
     if ((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) {  //if the pressure reading OR the soft pot reading is not being used break...
       break;
@@ -1511,6 +1555,8 @@ void loop() {      //The main loop itself doesn't play any music, it does instea
   readPressure();  //get the pressure
   readPosition();  //get position value
   readModWheel();  //get and send the right pressure pad through mod cmd
+
+  oledScreen();
 
   while ((pressureRibbonRead > lowerPrTr) && (preSoftPotRead > ribbonDeadZone)) {
     music();
@@ -1539,64 +1585,38 @@ void loop() {      //The main loop itself doesn't play any music, it does instea
     if (inNotePitch == true) {
       resetBend();
     }
-    displayUpdateCount = 0;  //keep the display on the stats screen for a bit after midi has turned off
     isOff = true;
   }
+  if ((isOff == true) && (displayUpdateCount >= 0)) {
+    updateButtons();
+    //check for right button presses
+    if (btn3Sts == LOW) {
 
-  //if any of the pads or the ribbon are in use then switch the display to show the status of said ribbons and pads
-  if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 10) || (rawLeftPad > 10)) {
-    displayUpdateCount = 0;
-  }
-
-  if (debug == false) {
-    if (displayUpdateCount < 100) {  //show the live info display a bit after the controller has finished playing notes
-      liveInfo();
-      displayUpdateCount++;
-      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-      sleepLed = 255;          //reset sleep vars to make it neater
-      sleepLedDir = false;
-    } else if (displayUpdateCount < 1000) {  //otherwise show the menu display
+      buttonPressed = 3;
       idleDisplay();
-      displayUpdateCount++;
-      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-      sleepLed = 255;          //reset sleep vars to make it neater
-      sleepLedDir = false;
-    } else {
-      display.clearDisplay();
-      display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
-      sleep();            //show blue led to indicate sleep like state
-    }
-  } else {  //only run if debugging
-    showVars();
-  }
 
-  updateButtons();
-  //check for right button presses
-
-  if (btn3Sts == LOW) {
-
-    buttonPressed = 3;
-    idleDisplay();
-    displayUpdateCount = 100;
-    if (noteListSelect == 0) {
+      if (noteListSelect == 0) {
+        drawPressed();
+        updateButtons();
+        displayUpdateCount = -1;  //set to -1 to prevent counter from changing so that the key change can be displayed and the controller can still be used
+      } else {
+        drawCross();
+        updateButtons();
+      }
+    } else if (btn2Sts == LOW) {
+      buttonPressed = 2;
+      idleDisplay();
       drawPressed();
-      changeKey();
-    } else {
-      drawCross();
+      AR2Menu();
+    } else if (btn1Sts == LOW) {
+      buttonPressed = 1;
+      idleDisplay();
+      drawPressed();
+      polySettings();
+      analogWrite(rLed, 255);
+      analogWrite(gLed, 255);
+      analogWrite(bLed, 255);  //turn off purple leds to show active controller
     }
-  } else if (btn2Sts == LOW) {
-    buttonPressed = 2;
-    idleDisplay();
-    drawPressed();
-    AR2Menu();
-  } else if (btn1Sts == LOW) {
-    buttonPressed = 1;
-    idleDisplay();
-    drawPressed();
-    polySettings();
-    analogWrite(rLed, 255);
-    analogWrite(gLed, 255);
-    analogWrite(bLed, 255);  //turn off purple leds to show active controller
   }
 }
 
