@@ -59,8 +59,8 @@ const int prBuffer = 550;   //the amount of pressure required to send any aftert
 //prBuffer - lowerPrTr = How much buffer there is from when MIDI is first sent to when Aftertouch is then sent
 
 //Control change pads
-int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the right pad. 1 = Modulation wheel, 74 = Equator height/slide
-int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the left pad.  1 = Modulation wheel, 74 = Equator height/slide
+int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the left pad. 1 = Modulation wheel, 74 = Equator height/slide
+int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the right pad.  1 = Modulation wheel, 74 = Equator height/slide
 
 const int upperPresPads = 900;  //set the mac MIDI CC values for the pads at that pad reading
 
