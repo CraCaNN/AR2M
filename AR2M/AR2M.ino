@@ -28,8 +28,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <MIDI.h>
 
+/*
+ToDo
 
-//CONFIG OPTIONS////////////////////////////////////////////////////////////
+Rewrite main loop to solve off-on state
+Rewrite poly play and noteOn/Off to use lists instead of individual variables
+
+could do both at the same time to start using local vars
+
+
+*/
+
+
+
+//CONFIG OPTIONS//
 //These options change how the controller behaves and you can modify to set the default behaviour on boot
 
 //Position ribbon
@@ -55,26 +67,34 @@ const int countToPitch = 50;  //How long the program will count before allowing 
 //Aftertouch ribbon
 const int upperPres = 900;  // set the max aftertouch to the ribbon reading
 const int lowerPrTr = 500;  //set the minimum amount of pressure needed for the pressure ribon to activate
-const int prBuffer = 550;   //the amount of pressure required to send any aftertouch
+const int prBuffer = 600;   //the amount of pressure required to send any aftertouch
 //prBuffer - lowerPrTr = How much buffer there is from when MIDI is first sent to when Aftertouch is then sent
 
+int MIDIchannel = 1;                   //set the default MIDI channel to send
+bool polyModeSeperateChannels = true;  //if true sends the different poly notes down different MIDI channels
+
 //Control change pads
-int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the left pad. 1 = Modulation wheel, 74 = Equator height/slide
-int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the right pad.  1 = Modulation wheel, 74 = Equator height/slide
+int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the right pad. 1 = Modulation wheel, 74 = Equator height/slide
+int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the left pad.  1 = Modulation wheel, 74 = Equator height/slide
 
 const int upperPresPads = 900;  //set the mac MIDI CC values for the pads at that pad reading
 
 //Poly Play. Works best when in Diatonic mode, plays notes 2 above the current note played on the ribbon. Repeates for the number in the variable
 int polyCount = 1;  //MUST BE between 1-4. Number of poly channels supports. Can be changed in the menu
 
+
+//Set poly plays channel output mode
+bool polyPlayMultiCh = true;
+
 //Debuging
-const bool debug = false;  //set to true to show more variables on the OLED and to enable pixel blink
+const bool debug = false;  //set to true to show more variables on the OLED
 
 //determines what list is currently in use, 0 is diatonic, 1 is chromatic
-int noteListSelect = 0;
-//END OF CONFIG OPTIONS//////////////////////////////////////
+bool noteListSelect = 0;
+//END OF CONFIG OPTIONS//
 
-//BOARD OPTIONS//These options are to match how you might have wired up your own controller///////////////////////////////////////////
+//BOARD OPTIONS//
+//These options are to match how you might have wired up your own controller
 const int softpotPin = A0;         //position ribbon pin
 const int pressurePotPinLft = A1;  //pressure pad right pin
 const int pressurePotPinRht = A2;  //pressure pad right pin
@@ -86,11 +106,15 @@ const int btn2 = 6;
 const int btn1 = 7;
 
 //LEDs for Tiny2040
-int rLed = 18;
-int gLed = 19;
-int bLed = 20;
+const int rLed = 18;
+const int gLed = 19;
+const int bLed = 20;
 
-//END OF BOARD OPTIONS//////////////////////////////////////////////////////////
+//OLED SDA/SCL pins
+const int oledSDApin = 0;
+const int oledSCLpin = 1;
+
+//END OF BOARD OPTIONS//
 
 
 //CODE BEGIN//
@@ -115,20 +139,43 @@ int btn3Sts = LOW;
 int btn2Sts = LOW;
 int btn1Sts = LOW;
 
-int buttonPressed = 0;  //helps determine which button was pressed to draw on the display
+//int buttonPressed = 0;  //helps determine which button was pressed to draw on the display
 
 int noteVelo = 0;      //The reading given by the pressure ribbon, currently programmed to output through the MIDI aftertouch command
 int prevNoteVelo = 0;  //Prevent sending the same pressure commands
 
 //this is all of the non sharp notes from C2 to around C6 essentially the key of C
-const int noteNumberList[] = { 36, 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108 };  //C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
+const int noteNumberList[] = {
+  36, 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71,
+  72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108
+};  //C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
+
+
 //const char * noteNumNameNoSharp[] = {"C2", "C2", "D2", "E2", "F2", "G2", "A2", "B2", "C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6", "E6", "F6", "G6", "A6", "B6", "C7", "D7", "E7", "F7", "G7", "A7", "B7", "C8"};
 //the list below contains every midi note number in letter form for visualisation purposes
-const char* noteNumNameNoSharp[] = { "C-1", "C#-1", "D-1", "D#-1", "E-1", "F-1", "F#-1", "G-1", "G#-1", "A-1", "A#-1", "B-1", "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0", "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1", "C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2", "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5", "C6", "C#6", "D6", "D#6", "E6", "F6", "F#6", "G6", "G#6", "A6", "A#6", "B6", "C7", "C#7", "D7", "D#7", "E7", "F7", "F#7", "G7", "G#7", "A7", "A#7", "B7", "C8", "C#8", "D8", "D#8", "E8", "F8", "F#8", "G8", "G#8", "A8", "A#8", "B8", "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX" };
+const char* noteNumNameNoSharp[] = {
+  "C-1", "C#-1", "D-1", "D#-1", "E-1", "F-1", "F#-1", "G-1", "G#-1", "A-1", "A#-1", "B-1",
+  "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
+  "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
+  "C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2",
+  "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3",
+  "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4",
+  "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5",
+  "C6", "C#6", "D6", "D#6", "E6", "F6", "F#6", "G6", "G#6", "A6", "A#6", "B6",
+  "C7", "C#7", "D7", "D#7", "E7", "F7", "F#7", "G7", "G#7", "A7", "A#7", "B7",
+  "C8", "C#8", "D8", "D#8", "E8", "F8", "F#8", "G8", "G#8", "A8", "A#8", "B8",
+  "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "MAX", "MAX", "MAX", "MAX",
+  "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX"
+};
 const char* keyList[] = { "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B " };  //for visualisation purposes only
 
 //These are all of the notes from A0. The sharp notes on the ribbon didnt sound right to me especially with the portamento effect but its probably because im not skilled enough
-const int noteNumListSharp[] = { 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96 };
+const int noteNumListSharp[] = {
+  21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+  41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+  61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+  81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96
+};
 //Also probably wouldn't sound right with poly mode due to the way I've programmed poly mode
 
 bool isOff = true;  //Used to determine the status of the controller for the leds and to prevent the main loop from spamming MIDI off messages
@@ -152,7 +199,7 @@ int prevNoteNum3 = 0;
 int prevNoteNum4 = 0;
 
 int reCheckVars[] = { 0, 0, 0, 0, 0 };  //Like an averager, stores the last 5 readings from reCheck()
-bool performReCheck = true;             //probably move this to the options
+bool performReCheck = false;            //probably move this to the options
 bool reCheckPassed = false;             //determines if the check has passed so the main loop doesnt contain the lengthy comparisons
 int reCheckCount = 0;                   //Helps keep count of what cycle the check is in and where to add the new value
 
@@ -209,9 +256,11 @@ void setup() {
   pinMode(gLed, OUTPUT);
   pinMode(bLed, OUTPUT);
 
+  //Serial.begin(31250);
+
   //Initiate OLED
-  Wire.setSDA(0);
-  Wire.setSCL(1);
+  Wire.setSDA(oledSDApin);
+  Wire.setSCL(oledSCLpin);
   display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
   display.clearDisplay();  //clear display
   display.display();
@@ -236,13 +285,25 @@ void setup() {
   //digitalWrite(pressureRibbon, HIGH);
   //digitalWrite(pressurePotPinRht, HIGH);
 
-  analogWrite(rLed, 255);
-  analogWrite(gLed, 255);
-  analogWrite(bLed, 255);
-
   displayUpdateCount = 100;  //prevents the liveInfo screen showing instantly after boot. Looks neater in my opinion
+  display.setCursor(0, 0);
+  display.print("AR2M");
+  display.setCursor(0, 12);
+  display.print("Version 2.2.3");  // will update this in every version hopefully
+  display.setCursor(0, 24);
+  display.print("Starting in 2...");
+  display.display();
+
+  delay(500);
+  analogWrite(rLed, 255);
+  delay(500);
+  analogWrite(gLed, 255);
+  delay(500);
+  analogWrite(bLed, 255);
+  delay(500);
 }
 
+//START OF MUSIC LOGIC CODE//
 //get and sends pressure/aftertouch. Also doesn't send data if its the same value as before
 void readPressure() {
   pressureRibbonRead = analogRead(pressureRibbon);  //get data for activation of controller
@@ -252,6 +313,9 @@ void readPressure() {
 
   if (noteVelo != prevNoteVelo) {      //only send an update if a change is detected in the pressure
     MIDI.sendAfterTouch(noteVelo, 1);  //Send the pressure reading through aftertouch
+    MIDI.sendAfterTouch(noteVelo, 2);  //Send the pressure reading through aftertouch
+    MIDI.sendAfterTouch(noteVelo, 3);  //Send the pressure reading through aftertouch
+    MIDI.sendAfterTouch(noteVelo, 4);  //Send the pressure reading through aftertouch
     prevNoteVelo = noteVelo;
   }
 
@@ -279,15 +343,21 @@ void readModWheel() {
     pressurePotLftRead = constrain(map(constrain(rawLeftPad, 20, upperPresPads), 20, upperPresPads, 0, 127), 0, 127);  //read the left pressure pad and change from 0-1023 to 0-127
     if (pressurePotRhtRead != prevPressurePotRhtRead) {
       MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, 1);  //send modulation command
+      MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, 2);  //send modulation command
+      MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, 3);  //send modulation command
+      MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, 4);  //send modulation command
       prevPressurePotRhtRead = pressurePotRhtRead;                         //make the prev reading the same as the current one so to fail the check until the readings change
     }
 
     if (pressurePotLftRead != prevPressurePotLftRead) {
       MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, 1);  //send modulation command
+      MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, 2);  //send modulation command
+      MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, 3);  //send modulation command
+      MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, 4);  //send modulation command
       prevPressurePotLftRead = pressurePotLftRead;                         //make the prev reading the same as the current one so to fail the check until the readings change
     }
-  } else {
-    MIDI.sendPitchBend(rawLeftPad * -8 + rawRightPad * 8, 1);
+  } else {  //use pads as a pitch bend
+    MIDI.sendPitchBend(rawLeftPad * -4 + rawRightPad * 4, 1);
   }
 }
 
@@ -340,19 +410,21 @@ void readPosition() {
 
 //gets the ribbon position and the note number. Deals with poly modes as well
 void noteSelect() {
-  readPosition();                                            //read ribbon value value
+  readPosition();                                            //read ribbon value
   softPotReading = preSoftPotRead / sectionSize;             //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
   if (noteListSelect == 0) {                                 //use the right scale
     noteNum = noteNumberList[softPotReading] + totalOffSet;  //apply any offsets and key changes then get the note
     noteNum2 = noteNumberList[softPotReading] + totalOffSet + polyOffset2;
     noteNum3 = noteNumberList[softPotReading] + totalOffSet + polyOffset3;
     noteNum4 = noteNumberList[softPotReading] + totalOffSet + polyOffset4;
-  } else {                                                          //doesnt really work on the chromatic scale, a feature i MIGHT work on later or just remove
+  } else {                                                          //doesnt really work on the chromatic scale
     noteNum = noteNumListSharp[softPotReading] + offSetSharp;       //get the actual midi note number to send
     noteNum2 = noteNumListSharp[softPotReading + 2] + offSetSharp;  //get the actual midi note number to send
     noteNum3 = noteNumListSharp[softPotReading + 4] + offSetSharp;  //get the actual midi note number to send
     noteNum4 = noteNumListSharp[softPotReading + 6] + offSetSharp;  //get the actual midi note number to send
   }
+
+  //simple failsafe to prevent the notes from wrapping back round to 0, ideally I wouldn't play anything but that would be really annoying to program
   if (noteNum > 127) {
     noteNum = 127;
   }
@@ -367,41 +439,77 @@ void noteSelect() {
   }
 }
 
-
-void noteOn() {          //sends the MIDI note on command, deals with POLY mode
-  if (polyCount == 1) {  //there is probably a better way of doing this with loops, although if I wanted to change the type of chord played i would have to change how the loop behaves
-    MIDI.sendNoteOn(noteNum, 127, 1);
-  } else if (polyCount == 2) {
-    MIDI.sendNoteOn(noteNum, 127, 1);
-    MIDI.sendNoteOn(noteNum2, 127, 1);
-  } else if (polyCount == 3) {
-    MIDI.sendNoteOn(noteNum, 127, 1);
-    MIDI.sendNoteOn(noteNum2, 127, 1);
-    MIDI.sendNoteOn(noteNum3, 127, 1);
-  } else if (polyCount == 4) {
-    MIDI.sendNoteOn(noteNum, 127, 1);
-    MIDI.sendNoteOn(noteNum2, 127, 1);
-    MIDI.sendNoteOn(noteNum3, 127, 1);
-    MIDI.sendNoteOn(noteNum4, 127, 1);
+//sends the MIDI note on command, deals with POLY mode
+void noteOn() {
+  if (polyModeSeperateChannels == true) {
+    if (polyCount == 1) {  //there is probably a better way of doing this with lists
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+    } else if (polyCount == 2) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel + 2);
+    } else if (polyCount == 3) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel + 2);
+      MIDI.sendNoteOn(noteNum3, 127, MIDIchannel + 3);
+    } else if (polyCount == 4) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel + 2);
+      MIDI.sendNoteOn(noteNum3, 127, MIDIchannel + 3);
+      MIDI.sendNoteOn(noteNum4, 127, MIDIchannel + 4);
+    }
+  } else {
+    if (polyCount == 1) {  //there is probably a better way of doing this with lists
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+    } else if (polyCount == 2) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel);
+    } else if (polyCount == 3) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum3, 127, MIDIchannel);
+    } else if (polyCount == 4) {
+      MIDI.sendNoteOn(noteNum, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum2, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum3, 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNum4, 127, MIDIchannel);
+    }
   }
 }
 
-
-void noteOff() {  //sends the MIDI note off command, deals with POLY mode
-  if (polyCount == 1) {
-    MIDI.sendNoteOff(prevNoteNum, 0, 1);
-  } else if (polyCount == 2) {
-    MIDI.sendNoteOff(prevNoteNum, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum2, 0, 1);
-  } else if (polyCount == 3) {
-    MIDI.sendNoteOff(prevNoteNum, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum2, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum3, 0, 1);
-  } else if (polyCount == 4) {
-    MIDI.sendNoteOff(prevNoteNum, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum2, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum3, 0, 1);
-    MIDI.sendNoteOff(prevNoteNum4, 0, 1);
+//sends the MIDI note off command, deals with POLY mode
+void noteOff() {
+  if (polyModeSeperateChannels == true) {
+    if (polyCount == 1) {
+      MIDI.sendNoteOff(prevNoteNum, 0, 1);
+    } else if (polyCount == 2) {
+      MIDI.sendNoteOff(prevNoteNum, 0, 1);
+      MIDI.sendNoteOff(prevNoteNum2, 0, 2);
+    } else if (polyCount == 3) {
+      MIDI.sendNoteOff(prevNoteNum, 0, 1);
+      MIDI.sendNoteOff(prevNoteNum2, 0, 2);
+      MIDI.sendNoteOff(prevNoteNum3, 0, 3);
+    } else if (polyCount == 4) {
+      MIDI.sendNoteOff(prevNoteNum, 0, 1);
+      MIDI.sendNoteOff(prevNoteNum2, 0, 2);
+      MIDI.sendNoteOff(prevNoteNum3, 0, 3);
+      MIDI.sendNoteOff(prevNoteNum4, 0, 4);
+    }
+  } else {
+    if (polyCount == 1) {
+      MIDI.sendNoteOff(prevNoteNum, 0, MIDIchannel);
+    } else if (polyCount == 2) {
+      MIDI.sendNoteOff(prevNoteNum, 0, MIDIchannel);
+      MIDI.sendNoteOff(prevNoteNum2, 0, MIDIchannel + 2);
+    } else if (polyCount == 3) {
+      MIDI.sendNoteOff(prevNoteNum, 0, MIDIchannel);
+      MIDI.sendNoteOff(prevNoteNum2, 0, MIDIchannel + 2);
+      MIDI.sendNoteOff(prevNoteNum3, 0, MIDIchannel + 3);
+    } else if (polyCount == 4) {
+      MIDI.sendNoteOff(prevNoteNum, 0, MIDIchannel);
+      MIDI.sendNoteOff(prevNoteNum2, 0, MIDIchannel + 2);
+      MIDI.sendNoteOff(prevNoteNum3, 0, MIDIchannel + 3);
+      MIDI.sendNoteOff(prevNoteNum4, 0, MIDIchannel + 4);
+    }
   }
 }
 
@@ -413,17 +521,9 @@ void storeNote() {
   prevNoteNum3 = noteNum3;
   prevNoteNum4 = noteNum4;
 }
+//END OF MUSIC LOGIC CODE//
 
 
-//updadte button status
-void updateButtons() {
-  btn1Sts = digitalRead(btn1);
-  btn2Sts = digitalRead(btn2);
-  btn3Sts = digitalRead(btn3);
-}
-
-
-//Functions for SSD1306 128x32 OLED//
 /*A brief comment on the performance impact of using the OLED & a rant on the dumb design of the UNO R3
 
 Initially I was worried that the screen would add to much overhead to run alongside everything else and I would have to manually limit when the display is updated with loops
@@ -438,6 +538,14 @@ I only figured out what was going on once I looked a a schematic for the UNO R3 
 Thankfully on the Pico the I2C pins on the pico are like every pin other than the analogue pins which is perfect for me.
 */
 
+//START OF OLED CODE//
+
+//updadte button status
+void updateButtons() {
+  btn1Sts = digitalRead(btn1);
+  btn2Sts = digitalRead(btn2);
+  btn3Sts = digitalRead(btn3);
+}
 
 //draw white boxes to represent the buttons
 void drawButtons() {
@@ -447,43 +555,38 @@ void drawButtons() {
 }
 
 //display one of 3 buttons being pressed, draws black boxes in the white boxes to simulate a press
-void drawPressed() {  //totally could have used a local variable for this but dont know how
+void drawPressed(int buttonPressed) {
   if (buttonPressed == 3) {
     display.fillRect(119, 23, 8, 8, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);  //delay to prevent repeat button presses and to show the animation on the OLED
   } else if (buttonPressed == 2) {
     display.fillRect(119, 12, 8, 8, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);
   } else if (buttonPressed == 1) {
     display.fillRect(119, 1, 8, 8, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);
   }
 }
 
-void drawCross() {  //Draw a cross to show if a button press is unable to perform the requested action
+//Draw a cross to show if a button press is unable to perform the requested action
+void drawCross(int buttonPressed) {
   if (buttonPressed == 3) {
     display.drawLine(119, 23, 126, 30, 0);
     display.drawLine(119, 30, 126, 23, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);  //delay to prevent repeat button presses and to show the animation on the OLED
   } else if (buttonPressed == 2) {
     display.drawLine(119, 12, 126, 19, 0);
     display.drawLine(119, 19, 126, 12, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);
   } else if (buttonPressed == 1) {
     display.drawLine(119, 1, 126, 8, 0);
     display.drawLine(119, 8, 126, 1, 0);
     display.display();
-    buttonPressed = 0;
     delay(200);
   }
 }
@@ -523,23 +626,21 @@ void AR2Menu() {
   analogWrite(gLed, 255);
   analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
   ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
-  buttonPressed = 2;
   while (true) {
     display.clearDisplay();
     display.setCursor(0, 0);
     display.print("Exit AR2M Menu --->");
     display.setCursor(0, 12);
-    display.print("------------------>");  //used to enable/disable position ribbon only mode, this is no longer needed and will be used at some point
+    display.print("Ribbon Scale ----->");  //used to enable/disable position ribbon only mode, this is no longer needed and will be used at some point
     display.setCursor(0, 24);
     display.print("Next Menu (1/3) -->");
     drawButtons();
-    screenBlink();
+
     display.display();
 
     updateButtons();
     if (btn1Sts == LOW) {  //exits the menu and returns to the idle screens
-      buttonPressed = 1;
-      drawPressed();
+      drawPressed(1);
       updateButtons();
       displayUpdateCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
       analogWrite(rLed, 255);
@@ -547,12 +648,45 @@ void AR2Menu() {
       break;
     }
     if (btn2Sts == LOW) {  //allows selection of position ribbon mode
-      buttonPressed = 2;
-      drawCross();
+      drawPressed(2);
+      while (true) {
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.print("Ribbon mode select ");
+        display.setCursor(0, 12);
+        if (noteListSelect == 0) {  //show star to represent the current active mode
+          display.print("Diatonic <- ------>");
+          display.setCursor(0, 24);
+          display.print("Chromatic -------->");
+        } else {
+          display.print("Diatonic --------->");
+          display.setCursor(0, 24);
+          display.print("Chromatic <- ----->");
+          polyCount = 1;  //since poly play isn't relly supported in Chromatic mode, it needs to be disabled
+        }
+        drawButtons();
+        display.display();
+        updateButtons();
+        if (btn1Sts == LOW) {
+          drawCross(1);
+          updateButtons();
+        }
+        if (btn2Sts == LOW) {
+          drawPressed(2);
+          noteListSelect = 0;
+          updateButtons();
+          break;
+        }
+        if (btn3Sts == LOW) {
+          drawPressed(3);
+          noteListSelect = 1;
+          updateButtons();
+          break;
+        }
+      }
     }
     if (btn3Sts == LOW) {  //progress to next menu layer
-      buttonPressed = 3;
-      drawPressed();
+      drawPressed(3);
       while (true) {
         if (superBreak > 0) {
           superBreak--;
@@ -560,7 +694,11 @@ void AR2Menu() {
         }
         display.clearDisplay();
         display.setCursor(0, 0);
-        display.print("Ribbon Scale ----->");
+        if (MIDIchannel < 10) {
+          display.print("MIDI Channel (" + String(MIDIchannel) + ") ->");
+        } else {
+          display.print("MIDI Channel (" + String(MIDIchannel) + ") >");
+        }
         display.setCursor(0, 12);
         display.print("MIDI CCs (" + String(lftPotControlChanel) + "|" + String(rhtPotControlChanel) + ")");
         display.setCursor(108, 12);
@@ -568,55 +706,51 @@ void AR2Menu() {
         display.setCursor(0, 24);
         display.print("Next Menu (2/3) -->");
         drawButtons();
-        screenBlink();
+
         display.display();
         updateButtons();
         if (btn1Sts == LOW) {
-          buttonPressed = 1;
-          drawPressed();
+          drawPressed(1);
           while (true) {
             display.clearDisplay();
-            display.setCursor(0, 0);
-            display.print("Ribbon mode select ");
-            display.setCursor(0, 12);
-            if (noteListSelect == 0) {  //show star to represent the current active mode
-              display.print("Diatonic * ------->");
-              display.setCursor(0, 24);
-              display.print("Chromatic -------->");
-            } else {
-              display.print("Diatonic --------->");
-              display.setCursor(0, 24);
-              display.print("Chromatic * ------>");
-            }
             drawButtons();
-            screenBlink();
+            display.setCursor(0, 0);
+            display.print("MIDI Ch");
+            display.setCursor(4, 10);
+            display.setTextSize(3);
+            display.print(MIDIchannel);
+            display.setTextSize(1);
+            display.setCursor(48, 0);
+            display.print("| Exit --->");
+            display.setCursor(48, 12);
+            display.print("| Inc ---->");
+            display.setCursor(48, 24);
+            display.print("| Dec ---->");
             display.display();
             updateButtons();
             if (btn1Sts == LOW) {
-              buttonPressed = 1;
-              drawCross();
-              updateButtons();
-            }
-            if (btn2Sts == LOW) {
-              buttonPressed = 2;
-              drawPressed();
-              noteListSelect = 0;
-              updateButtons();
+              drawPressed(1);
               break;
-            }
-            if (btn3Sts == LOW) {
-              buttonPressed = 3;
-              drawPressed();
-              noteListSelect = 1;
-              updateButtons();
-              break;
+            } else if (btn2Sts == LOW) {
+              if ((MIDIchannel == 16) ^ ((polyPlayMultiCh == true) && (MIDIchannel == 13))) {  //prevent from going over 16 XOR prevent from going over 13 if multy channel poly is true
+                drawCross(2);
+              } else {
+                drawPressed(2);
+                MIDIchannel++;
+              }
+            } else if (btn3Sts == LOW) {
+              if (MIDIchannel == 1) {  //I initially set this to 0 which meant you could send on MIDI CC 0, which doesn't exist XD
+                drawCross(3);
+              } else {
+                drawPressed(3);
+                MIDIchannel--;
+              }
             }
           }
         }
         //change the pressure pads CC number. IN the synth I like to use, Surge XT, you can really use any number. But for some special synths like Equator, certain functions only work on specific MIDI CCs
         else if (btn2Sts == LOW) {
-          buttonPressed = 2;
-          drawPressed();
+          drawPressed(2);
           while (true) {
             updateButtons();
             display.clearDisplay();
@@ -644,14 +778,12 @@ void AR2Menu() {
             }
             display.display();
             if (btn1Sts == LOW) {
-              buttonPressed = 1;
-              drawPressed();
+              drawPressed(1);
               updateButtons();
               break;
             }
             if (btn2Sts == LOW) {
-              buttonPressed = 2;
-              drawPressed();
+              drawPressed(2);
               updateButtons();
               while (true) {
                 display.clearDisplay();
@@ -672,32 +804,27 @@ void AR2Menu() {
                 display.display();
                 updateButtons();
                 if (btn1Sts == LOW) {
-                  buttonPressed = 1;
-                  drawPressed();
+                  drawPressed(1);
                   break;
                 } else if (btn2Sts == LOW) {
-                  buttonPressed = 2;
-
                   if (lftPotControlChanel == 127) {
-                    drawCross();
+                    drawCross(2);
                   } else {
-                    drawPressed();
+                    drawPressed(2);
                     lftPotControlChanel++;
                   }
                 } else if (btn3Sts == LOW) {
-                  buttonPressed = 3;
                   if (lftPotControlChanel == 1) {  //I initially set this to 0 which meant you could send on MIDI CC 0, which doesn't exist XD
-                    drawCross();
+                    drawCross(3);
                   } else {
-                    drawPressed();
+                    drawPressed(3);
                     lftPotControlChanel--;
                   }
                 }
               }
             }
             if (btn3Sts == LOW) {
-              buttonPressed = 3;
-              drawPressed();
+              drawPressed(3);
               updateButtons();
               while (true) {
                 display.clearDisplay();
@@ -718,24 +845,20 @@ void AR2Menu() {
                 display.display();
                 updateButtons();
                 if (btn1Sts == LOW) {
-                  buttonPressed = 1;
-                  drawPressed();
+                  drawPressed(1);
                   break;
                 } else if (btn2Sts == LOW) {
-                  buttonPressed = 2;
-
                   if (rhtPotControlChanel == 127) {
-                    drawCross();
+                    drawCross(2);
                   } else {
-                    drawPressed();
+                    drawPressed(2);
                     rhtPotControlChanel++;
                   }
                 } else if (btn3Sts == LOW) {
-                  buttonPressed = 3;
                   if (rhtPotControlChanel == 1) {
-                    drawCross();
+                    drawCross(3);
                   } else {
-                    drawPressed();
+                    drawPressed(3);
                     rhtPotControlChanel--;
                   }
                 }
@@ -743,8 +866,7 @@ void AR2Menu() {
             }
           }
         } else if (btn3Sts == LOW) {
-          buttonPressed = 3;
-          drawPressed();
+          drawPressed(3);
           updateButtons();
           while (true) {
             if (superBreak > 0) {
@@ -761,24 +883,80 @@ void AR2Menu() {
               display.print("Pads pitch bend -->");
             }
             display.setCursor(0, 12);
-            display.print("------------------>");
+            display.print("Poly MIDI Ch ----->");
             display.setCursor(0, 24);
             display.print("Next Menu (3/3)--->");
             display.display();
             if (btn1Sts == LOW) {
-              buttonPressed = 1;
-              drawPressed();
+              drawPressed(1);
               if (padPitchBend == false) {
                 padPitchBend = true;
               } else {
                 padPitchBend = false;
               }
             } else if (btn2Sts == LOW) {
-              buttonPressed = 2;
-              drawCross();
+              drawPressed(2);
+              while (true) {
+                if (polyPlayMultiCh == true) {
+                  display.clearDisplay();
+                  display.setCursor(0, 0);
+                  display.print("Poly Play Chan Mode");
+                  display.setCursor(0, 12);
+                  display.print("Send diff chan<- ->");
+                  display.setCursor(0, 24);
+                  display.print("Send same chan --->");
+                } else {
+                  display.clearDisplay();
+                  display.setCursor(0, 0);
+                  display.print("Poly Play Chan Mode");
+                  display.setCursor(0, 12);
+                  display.print("Send diff chan --->");
+                  display.setCursor(0, 24);
+                  display.print("Send same chan<- ->");
+                }
+                drawButtons();
+                display.display();
+                updateButtons();
+
+                if (btn1Sts == LOW) {
+                  drawCross(1);
+                  updateButtons();
+                }
+                if (btn2Sts == LOW) {
+                  drawPressed(2);
+                  updateButtons();
+                  if (MIDIchannel > 13) {  //warn the user that the MIDI channel has changed in order to fit poly notes. I really dont see when this would be an issue since I've created my own MIDI line so no other devices should share these channels, but a good failsafe
+                    MIDIchannel = 13;
+                    polyPlayMultiCh = true;
+                    display.clearDisplay();
+                    display.fillRect(0, 0, 128, 32, 1);
+                    display.setTextColor(0);
+                    display.setCursor(1, 1);
+                    display.print("Warning: MIDI is now");
+                    display.setCursor(1, 12);
+                    display.print("Ch 13 to fit multiple");
+                    display.setCursor(1, 23);
+                    display.print("poly notes!");
+                    display.display();
+                    delay(5000);
+                    display.setTextColor(1);
+                    break;
+                  } else {
+                    drawPressed(2);
+                    polyPlayMultiCh = true;
+                    updateButtons();
+                    break;
+                  }
+                }
+                if (btn3Sts == LOW) {
+                  drawPressed(3);
+                  polyPlayMultiCh = false;
+                  updateButtons();
+                  break;
+                }
+              }
             } else if (btn3Sts == LOW) {
-              buttonPressed = 3;
-              drawPressed();
+              drawPressed(3);
               superBreak = 2;
             }
           }
@@ -788,364 +966,328 @@ void AR2Menu() {
   }
 }
 
-//Change the poly mode settings also want to move this to a seperate file which might be less annoying than AR2Menu
+//Change the poly mode settings also want to move this to a seperate file which might be less annoying to implament than AR2Menu
 void polySettings() {
-  analogWrite(rLed, 205);
-  analogWrite(gLed, 255);
-  analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
-  ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
-  while (true) {
-    if (superBreak > 0) {
-      superBreak = 0;            //since this is the last break set superBreak to 0 incase of any negative or positive number
-      displayUpdateCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
-      break;
-    }
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.print("Exit ------------->");
-    display.setCursor(0, 12);
-    display.print("Poly Count (" + String(polyCount) + ") --->");
-    display.setCursor(0, 24);
-    display.print("Poly Type -------->");
-    drawButtons();
-    screenBlink();
-    display.display();
+  if (noteListSelect == 1) {  //if trying to access poly play mode in chromatic mode, don't
+    drawCross(1);
+  } else {
+    analogWrite(rLed, 205);
+    analogWrite(gLed, 255);
+    analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
+    drawPressed(1);
+    ribbonIndicator = 0;  //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
+    while (true) {
+      if (superBreak > 0) {
+        superBreak = 0;            //since this is the last break set superBreak to 0 incase of any negative or positive number
+        displayUpdateCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
+        break;
+      }
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.print("Exit ------------->");
+      display.setCursor(0, 12);
+      display.print("Poly Count (" + String(polyCount) + ") --->");
+      display.setCursor(0, 24);
+      display.print("Poly Type -------->");
+      drawButtons();
 
-    updateButtons();
-    if (btn2Sts == LOW) {
-      buttonPressed = 2;
-      drawPressed();
-      while (true) {
-        if (superBreak > 0) {
-          superBreak--;
-          break;
-        }
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.print("Exit ------------->");
-        display.setCursor(0, 12);
-        display.print("Current      Inc ->");
-        display.setCursor(0, 24);
-        display.print(("Mode: ") + String(polyCount) + ("      Dec ->"));
-        drawButtons();
-        display.display();
-        updateButtons();
-        if (btn1Sts == LOW) {
-          buttonPressed = 1;
-          drawPressed();
-          updateButtons();
-          break;
-        } else if (btn3Sts == LOW) {
-          if (polyCount <= 1) {
-            buttonPressed = 3;
-            drawCross();
-          } else {
-            buttonPressed = 3;
-            drawPressed();
-            polyCount--;
+      display.display();
+
+      updateButtons();
+      if (btn2Sts == LOW) {
+        drawPressed(2);
+        while (true) {
+          if (superBreak > 0) {
+            superBreak--;
+            break;
           }
-        } else if (btn2Sts == LOW) {
-          if (polyCount >= maxPolyCount) {
-            buttonPressed = 2;
-            drawCross();
-          } else {
-            buttonPressed = 2;
-            drawPressed();
-            polyCount++;
+          display.clearDisplay();
+          display.setCursor(0, 0);
+          display.print("Exit ------------->");
+          display.setCursor(0, 12);
+          display.print("Current      Inc ->");
+          display.setCursor(0, 24);
+          display.print(("Mode: ") + String(polyCount) + ("      Dec ->"));
+          drawButtons();
+          display.display();
+          updateButtons();
+          if (btn1Sts == LOW) {
+            drawPressed(1);
+            updateButtons();
+            break;
+          } else if (btn3Sts == LOW) {
+            if (polyCount <= 1) {
+              drawCross(3);
+            } else {
+              drawPressed(3);
+              polyCount--;
+            }
+          } else if (btn2Sts == LOW) {
+            if (polyCount >= maxPolyCount) {
+              drawCross(2);
+            } else {
+              drawPressed(2);
+              polyCount++;
+            }
           }
         }
       }
-    }
-    //change what poly modes are played
-    else if (btn3Sts == LOW) {
-      buttonPressed = 3;
-      drawPressed();
-      updateButtons();
-      while (true) {
-        if (superBreak > 0) {
-          superBreak--;
-          break;
-        }
-        display.clearDisplay();
-        drawButtons();
-        display.setCursor(0, 0);
-        display.print("Exit ------------->");
-        display.setCursor(0, 12);
-        display.print("Major Chords ----->");
-        display.setCursor(0, 24);
-        display.print("Minor Chords ----->");
+      //change what poly modes are played
+      else if (btn3Sts == LOW) {
+        drawPressed(3);
         updateButtons();
-        display.display();
-        if (btn2Sts == LOW) {
-          buttonPressed = 2;
+        while (true) {
+          if (superBreak > 0) {
+            superBreak--;
+            break;
+          }
+          display.clearDisplay();
           drawButtons();
-          drawPressed();
+          display.setCursor(0, 0);
+          display.print("Exit ------------->");
+          display.setCursor(0, 12);
+          display.print("Major Chords ----->");
+          display.setCursor(0, 24);
+          display.print("Minor Chords ----->");
           updateButtons();
-          while (true) {
-            if (superBreak > 0) {
-              superBreak--;
-              break;
-            }
-            display.clearDisplay();
-            drawButtons();
-            display.setCursor(0, 0);
-            display.print("3 Oct      1,8,15 >");
-            display.setCursor(0, 12);
-            display.print("Major 6   1,3,5,6 >");
-            display.setCursor(0, 24);
-            display.print("Next (1/3)-------->");
+          display.display();
+          if (btn2Sts == LOW) {
+            drawPressed(2);
             updateButtons();
-            display.display();
-            if (btn1Sts == LOW) {
-              buttonPressed = 1;
-              drawButtons();
-              drawPressed();
-              updateButtons();
-              polyOffset2 = 12;
-              polyOffset3 = 24;
-              polyOffset4 = 0;
-              maxPolyCount = 3;
-              if (polyCount == 4) {
-                polyCount = 3;
+            while (true) {
+              if (superBreak > 0) {
+                superBreak--;
+                break;
               }
-              superBreak = 3;
-            } else if (btn2Sts == LOW) {
-              buttonPressed = 2;
+              display.clearDisplay();
               drawButtons();
-              drawPressed();
+              display.setCursor(0, 0);
+              display.print("3 Oct      1,8,15 >");
+              display.setCursor(0, 12);
+              display.print("Major 6   1,3,5,6 >");
+              display.setCursor(0, 24);
+              display.print("Next (1/3)-------->");
               updateButtons();
-              polyOffset2 = 4;
-              polyOffset3 = 7;
-              polyOffset4 = 9;
-              maxPolyCount = 4;
-              superBreak = 3;
-            } else if (btn3Sts == LOW) {
-              buttonPressed = 3;
-              drawButtons();
-              drawPressed();
-              while (true) {
-                if (superBreak > 0) {
-                  superBreak--;
-                  break;
-                }
-                display.clearDisplay();
-                drawButtons();
-                display.setCursor(0, 0);
-                display.print("Dom 7    1,3,5,b7 >");
-                display.setCursor(0, 12);
-                display.print("Major 7   1,3,5,7 >");
-                display.setCursor(0, 24);
-                display.print("Next (2/3)-------->");
+              display.display();
+              if (btn1Sts == LOW) {
+                drawPressed(1);
                 updateButtons();
-                display.display();
-                if (btn1Sts == LOW) {
-                  buttonPressed = 1;
-                  drawPressed();
+                polyOffset2 = 12;
+                polyOffset3 = 24;
+                polyOffset4 = 0;
+                maxPolyCount = 3;
+                if (polyCount == 4) {
+                  polyCount = 3;
+                }
+                superBreak = 3;
+              } else if (btn2Sts == LOW) {
+                drawPressed(2);
+                updateButtons();
+                polyOffset2 = 4;
+                polyOffset3 = 7;
+                polyOffset4 = 9;
+                maxPolyCount = 4;
+                superBreak = 3;
+              } else if (btn3Sts == LOW) {
+                drawPressed(3);
+                while (true) {
+                  if (superBreak > 0) {
+                    superBreak--;
+                    break;
+                  }
+                  display.clearDisplay();
+                  drawButtons();
+                  display.setCursor(0, 0);
+                  display.print("Dom 7    1,3,5,b7 >");
+                  display.setCursor(0, 12);
+                  display.print("Major 7   1,3,5,7 >");
+                  display.setCursor(0, 24);
+                  display.print("Next (2/3)-------->");
                   updateButtons();
-                  polyOffset2 = 4;
-                  polyOffset3 = 7;
-                  polyOffset4 = 10;
-                  maxPolyCount = 4;
-                  superBreak = 4;
-                } else if (btn2Sts == LOW) {
-                  buttonPressed = 2;
-                  drawPressed();
-                  updateButtons();
-                  polyOffset2 = 4;
-                  polyOffset3 = 7;
-                  polyOffset4 = 11;
-                  maxPolyCount = 4;
-                  superBreak = 4;
-                } else if (btn3Sts == LOW) {
-                  buttonPressed = 3;
-                  drawPressed();
-                  updateButtons();
-                  while (true) {
-                    if (superBreak > 0) {
-                      superBreak--;
-                      break;
-                    }
-                    display.clearDisplay();
-                    drawButtons();
-                    display.setCursor(0, 0);
-                    display.print("Aug        1,3,#5 >");
-                    display.setCursor(0, 12);
-                    display.print("Exit ------------->");
-                    display.setCursor(0, 24);
-                    display.print("Next (3/3) ------->");
+                  display.display();
+                  if (btn1Sts == LOW) {
+                    drawPressed(1);
                     updateButtons();
-                    display.display();
-                    if (btn1Sts == LOW) {
-                      buttonPressed = 1;
-                      drawPressed();
-                      updateButtons();
-                      polyOffset2 = 4;
-                      polyOffset3 = 8;
-                      polyOffset4 = 0;
-                      if (polyCount == 4) {
-                        polyCount = 3;
+                    polyOffset2 = 4;
+                    polyOffset3 = 7;
+                    polyOffset4 = 10;
+                    maxPolyCount = 4;
+                    superBreak = 4;
+                  } else if (btn2Sts == LOW) {
+                    drawPressed(2);
+                    updateButtons();
+                    polyOffset2 = 4;
+                    polyOffset3 = 7;
+                    polyOffset4 = 11;
+                    maxPolyCount = 4;
+                    superBreak = 4;
+                  } else if (btn3Sts == LOW) {
+                    drawPressed(3);
+                    updateButtons();
+                    while (true) {
+                      if (superBreak > 0) {
+                        superBreak--;
+                        break;
                       }
-                      maxPolyCount = 3;
-                      superBreak = 5;
-                    } else if (btn2Sts == LOW) {
-                      buttonPressed = 2;
-                      drawPressed();
+                      display.clearDisplay();
+                      drawButtons();
+                      display.setCursor(0, 0);
+                      display.print("Aug        1,3,#5 >");
+                      display.setCursor(0, 12);
+                      display.print("Exit ------------->");
+                      display.setCursor(0, 24);
+                      display.print("Next (3/3) ------->");
                       updateButtons();
-                      buttonPressed = 2;
-                      superBreak = 5;
-                    } else if (btn3Sts == LOW) {
-                      buttonPressed = 3;
-                      drawPressed();
-                      updateButtons();
-                      buttonPressed = 2;
-                      superBreak = 2;
+                      display.display();
+                      if (btn1Sts == LOW) {
+                        drawPressed(1);
+                        updateButtons();
+                        polyOffset2 = 4;
+                        polyOffset3 = 8;
+                        polyOffset4 = 0;
+                        if (polyCount == 4) {
+                          polyCount = 3;
+                        }
+                        maxPolyCount = 3;
+                        superBreak = 5;
+                      } else if (btn2Sts == LOW) {
+                        drawPressed(2);
+                        updateButtons();
+                        superBreak = 5;
+                      } else if (btn3Sts == LOW) {
+                        drawPressed(3);
+                        updateButtons();
+                        superBreak = 2;
+                      }
                     }
                   }
                 }
               }
             }
-          }
-        } else if (btn3Sts == LOW) {
-          buttonPressed = 3;
-          drawButtons();
-          drawPressed();
-          updateButtons();
-          while (true) {
-            if (superBreak > 0) {
-              superBreak--;
-              break;
-            }
-            display.clearDisplay();
-            drawButtons();
-            display.setCursor(0, 0);
-            display.print("Minor      1,b3,5 >");
-            display.setCursor(0, 12);
-            display.print("Minor 6  1,b3,5,6 >");
-            display.setCursor(0, 24);
-            display.print("Next (1/3)-------->");
+          } else if (btn3Sts == LOW) {
+            drawPressed(3);
             updateButtons();
-            display.display();
-            if (btn1Sts == LOW) {
-              buttonPressed = 1;
-              drawButtons();
-              drawPressed();
-              updateButtons();
-              polyOffset2 = 3;
-              polyOffset3 = 7;
-              polyOffset4 = 0;
-              maxPolyCount = 3;
-              if (polyCount == 4) {
-                polyCount = 3;
+            while (true) {
+              if (superBreak > 0) {
+                superBreak--;
+                break;
               }
-              superBreak = 3;
-            } else if (btn2Sts == LOW) {
-              buttonPressed = 2;
+              display.clearDisplay();
               drawButtons();
-              drawPressed();
+              display.setCursor(0, 0);
+              display.print("Minor      1,b3,5 >");
+              display.setCursor(0, 12);
+              display.print("Minor 6  1,b3,5,6 >");
+              display.setCursor(0, 24);
+              display.print("Next (1/3)-------->");
               updateButtons();
-              polyOffset2 = 3;
-              polyOffset3 = 7;
-              polyOffset4 = 9;
-              maxPolyCount = 4;
-              superBreak = 3;
-            } else if (btn3Sts == LOW) {
-              buttonPressed = 3;
-              drawButtons();
-              drawPressed();
-              while (true) {
-                if (superBreak > 0) {
-                  superBreak--;
-                  break;
-                }
-                display.clearDisplay();
-                drawButtons();
-                display.setCursor(0, 0);
-                display.print("Dim 7   1,b3,b5,7 >");
-                display.setCursor(0, 12);
-                display.print("Minor 7  1,b3,5,b7>");
-                display.setCursor(0, 24);
-                display.print("Next (2/3)-------->");
+              display.display();
+              if (btn1Sts == LOW) {
+                drawPressed(1);
                 updateButtons();
-                display.display();
-                if (btn1Sts == LOW) {
-                  buttonPressed = 1;
-                  drawPressed();
+                polyOffset2 = 3;
+                polyOffset3 = 7;
+                polyOffset4 = 0;
+                maxPolyCount = 3;
+                if (polyCount == 4) {
+                  polyCount = 3;
+                }
+                superBreak = 3;
+              } else if (btn2Sts == LOW) {
+                drawPressed(2);
+                updateButtons();
+                polyOffset2 = 3;
+                polyOffset3 = 7;
+                polyOffset4 = 9;
+                maxPolyCount = 4;
+                superBreak = 3;
+              } else if (btn3Sts == LOW) {
+                drawPressed(3);
+                while (true) {
+                  if (superBreak > 0) {
+                    superBreak--;
+                    break;
+                  }
+                  display.clearDisplay();
+                  drawButtons();
+                  display.setCursor(0, 0);
+                  display.print("Dim 7   1,b3,b5,7 >");
+                  display.setCursor(0, 12);
+                  display.print("Minor 7  1,b3,5,b7>");
+                  display.setCursor(0, 24);
+                  display.print("Next (2/3)-------->");
                   updateButtons();
-                  polyOffset2 = 3;
-                  polyOffset3 = 6;
-                  polyOffset4 = 9;
-                  maxPolyCount = 4;
-                  superBreak = 4;
-                } else if (btn2Sts == LOW) {
-                  buttonPressed = 2;
-                  drawPressed();
-                  updateButtons();
-                  polyOffset2 = 3;
-                  polyOffset3 = 7;
-                  polyOffset4 = 10;
-                  maxPolyCount = 4;
-                  superBreak = 4;
-                } else if (btn3Sts == LOW) {
-                  buttonPressed = 3;
-                  drawPressed();
-                  updateButtons();
-                  while (true) {
-                    if (superBreak > 0) {
-                      superBreak--;
-                      break;
-                    }
-                    display.clearDisplay();
-                    drawButtons();
-                    display.setCursor(0, 0);
-                    display.print("Dim       1,b3,b5 >");
-                    display.setCursor(0, 12);
-                    display.print("Cancel ----------->");
-                    display.setCursor(0, 24);
-                    display.print("Next (3/3) ------->");
+                  display.display();
+                  if (btn1Sts == LOW) {
+                    drawPressed(1);
                     updateButtons();
-                    display.display();
-                    if (btn1Sts == LOW) {
-                      buttonPressed = 1;
-                      drawPressed();
-                      updateButtons();
-                      polyOffset2 = 3;
-                      polyOffset3 = 6;
-                      polyOffset4 = 0;
-                      if (polyCount == 4) {
-                        polyCount = 3;
+                    polyOffset2 = 3;
+                    polyOffset3 = 6;
+                    polyOffset4 = 9;
+                    maxPolyCount = 4;
+                    superBreak = 4;
+                  } else if (btn2Sts == LOW) {
+                    drawPressed(2);
+                    updateButtons();
+                    polyOffset2 = 3;
+                    polyOffset3 = 7;
+                    polyOffset4 = 10;
+                    maxPolyCount = 4;
+                    superBreak = 4;
+                  } else if (btn3Sts == LOW) {
+                    drawPressed(3);
+                    updateButtons();
+                    while (true) {
+                      if (superBreak > 0) {
+                        superBreak--;
+                        break;
                       }
-                      maxPolyCount = 3;
-                      superBreak = 5;
-                    } else if (btn2Sts == LOW) {
-                      buttonPressed = 2;
-                      drawPressed();
+                      display.clearDisplay();
+                      drawButtons();
+                      display.setCursor(0, 0);
+                      display.print("Dim       1,b3,b5 >");
+                      display.setCursor(0, 12);
+                      display.print("Cancel ----------->");
+                      display.setCursor(0, 24);
+                      display.print("Next (3/3) ------->");
                       updateButtons();
-                      buttonPressed = 2;
-                      superBreak = 5;
-                    } else if (btn3Sts == LOW) {
-                      buttonPressed = 3;
-                      drawPressed();
-                      updateButtons();
-                      buttonPressed = 2;
-                      superBreak = 2;
+                      display.display();
+                      if (btn1Sts == LOW) {
+                        drawPressed(1);
+                        updateButtons();
+                        polyOffset2 = 3;
+                        polyOffset3 = 6;
+                        polyOffset4 = 0;
+                        if (polyCount == 4) {
+                          polyCount = 3;
+                        }
+                        maxPolyCount = 3;
+                        superBreak = 5;
+                      } else if (btn2Sts == LOW) {
+                        drawPressed(2);
+                        updateButtons();
+                        superBreak = 5;
+                      } else if (btn3Sts == LOW) {
+                        drawPressed(3);
+                        updateButtons();
+                        superBreak = 2;
+                      }
                     }
                   }
                 }
               }
             }
+          } else if (btn1Sts == LOW) {
+            drawPressed(1);
+            updateButtons();
+            break;
           }
-        } else if (btn1Sts == LOW) {
-          buttonPressed = 1;
-          drawPressed();
-          updateButtons();
-          break;
         }
+      } else if (btn1Sts == LOW) {
+        drawPressed(1);
+        updateButtons();
+        break;
       }
-    } else if (btn1Sts == LOW) {
-      buttonPressed = 1;
-      drawPressed();
-      updateButtons();
-      break;
     }
   }
 }
@@ -1170,8 +1312,7 @@ void changeKeyOct() {
   display.display();
   updateButtons();
   if (btn1Sts == LOW) {
-    buttonPressed = 1;
-    drawPressed();
+    drawPressed(1);
     updateButtons();
 
     if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
@@ -1181,19 +1322,18 @@ void changeKeyOct() {
     }
   }
   if (btn2Sts == LOW) {  //change key
-    buttonPressed = 2;
-    drawPressed();
+    drawPressed(2);
     updateButtons();
     displayUpdateCount = -2;  //-2 to indicate to oledScreen to show the changeKey screen
   }
   if (btn3Sts == LOW) {  //change octaves
-    buttonPressed = 3;
-    drawPressed();
+    drawPressed(3);
     updateButtons();
     displayUpdateCount = -3;  //-3 to indicate to oledScreen to show the changeOct screen
   }
 }
 
+//change the key
 void changeKey() {
   display.clearDisplay();
   drawButtons();
@@ -1213,36 +1353,34 @@ void changeKey() {
   display.display();
   updateButtons();
   if (btn1Sts == LOW) {
-    buttonPressed = 1;
-    drawPressed();
+    drawPressed(1);
     displayUpdateCount = -1;  //reset display count to show the normal screen
   }
 
   else if (btn2Sts == LOW) {
-    buttonPressed = 2;
 
     if (offSetKey == 11) {  //wrap around if youve reached the key of B
-      drawPressed();
+      drawPressed(2);
       offSetKey = 0;
     } else {
-      drawPressed();
+      drawPressed(2);
       offSetKey++;
     }
   }
 
   else if (btn3Sts == LOW) {
-    buttonPressed = 3;
     if (offSetKey == 0) {
-      drawPressed();
+      drawPressed(3);
       offSetKey = 11;
     } else {
-      drawPressed();
+      drawPressed(3);
       offSetKey--;
     }
   }
   updateButtons();
 }
 
+//change the octave
 void changeOct() {
   display.clearDisplay();
   drawButtons();
@@ -1266,28 +1404,25 @@ void changeOct() {
   updateButtons();
   display.display();
   if (btn1Sts == LOW) {
-    buttonPressed = 1;
-    drawPressed();
+    drawPressed(1);
     displayUpdateCount = -1;  //reset display count to show the normal screen
   }
 
   else if (btn2Sts == LOW) {
-    buttonPressed = 2;
 
     if (octaveOffSet == 3) {  //if you allow this value to be higher the controller could wrap around to midi note number 0 assuming you are using default section size of 32
-      drawCross();
+      drawCross(2);
     } else {
-      drawPressed();
+      drawPressed(2);
       octaveOffSet++;
     }
   }
 
   else if (btn3Sts == LOW) {
-    buttonPressed = 3;
     if (octaveOffSet == -3) {  //if you allow this value to be lower the controller could wrap around to midi note number 127
-      drawCross();
+      drawCross(3);
     } else {
-      drawPressed();
+      drawPressed(3);
       octaveOffSet--;
     }
   }
@@ -1301,7 +1436,11 @@ void idleDisplay() {
 
   //Show ribbon only status
   display.setCursor(0, 0);
-  display.print("Poly Settings ---->");
+  if (noteListSelect == 0) {
+    display.print("Poly Settings ---->");
+  } else {
+    display.print("N/A in Chromatic");
+  }
 
   display.setCursor(0, 12);
   display.print("AR2M Menu -------->");
@@ -1320,7 +1459,7 @@ void idleDisplay() {
     display.print("N/A in Chromatic");
   }
   drawButtons();
-  screenBlink();
+
   display.display();
 }
 
@@ -1357,7 +1496,7 @@ void showVars() {
   display.print(reCheckVars[3]);
   display.print(",");
   display.print(reCheckVars[4]);
-  screenBlink();
+
   display.display();
 }
 
@@ -1513,32 +1652,42 @@ void oledScreen() {
     showVars();
   }
 }
+//END OF OLED CODE//
 
 
+/*
+I've had this bug and it's existed probably since version beta-0.1 
+the bug happens, i still don't really know the exact process
+then my controller plays the previous note
+then when i release the controller it then plays the note it should have done in the first place
+I don't know where this occurs, I've built a flowchart of this program to my best ability and can't see any issues in that
+
+ive found an edge case but the window of time for that bug to happen seems unlikely
+either way ive reshuffled the code around a bit so Ill see if that fixes it
+*/
 
 //put the main music logic part of the code in a function seperate from the main loop so I can control the start behaviour a bit easier
 void music() {
-  if (isOff == true) {  //to prevent sending infinate note off commands at the end of the main loop
-    isOff = false;
-  }
-  noteSelect();  //get note
+  isOff = false;  //to prevent sending infinate note off commands at the end of the main loop
+  //noteSelect();  //get note
 
   digitalWrite(bLed, HIGH);  //turn off the blue led if its in the sleep state
   sleepLed = 255;            //reset sleep vars to make it neater
   sleepLedDir = false;
+  noteSelect();  //get note
+  noteOn();      //send the first on
+  storeNote();   //make prev note the same as current note as if this was different it could reak the loop early and create weird sounds
+  delay(10);
 
-  noteOn();     //send the first on
-  storeNote();  //make prev note the same as current note as if this was different it could reak the loop early and create weird sounds
+  //update all readings
 
-  while (true) {  //keep checking the ribon position hasn't changed so we can keep the note ON WITHOUT sending infinate note on/off commands
-    //update all readings
-    noteSelect();       //get note
-    inNotePitchBend();  //only runs if inNotePitch is true, off by default
-    readPressure();     //get the pressure
-    readModWheel();     //get and send the right pressure pad through mod cmd
+  //inNotePitchBend();  //only runs if inNotePitch is true, off by default
+  readPressure();  //get the pressure
+  readModWheel();  //get and send the right pressure pad through mod cmd
 
-    oledScreen();  //run OLED code
 
+  while (true) {                                                                  //keep checking the ribon position hasn't changed so we can keep the note ON WITHOUT sending infinate note on/off commands
+    oledScreen();                                                                 //run OLED code
     if ((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) {  //if the pressure reading OR the soft pot reading is not being used break...
       break;
     } else if (noteNum != prevNoteNum) {  //if the notes have changed and both fingers are on the pressure pad and position ribbon then
@@ -1547,71 +1696,84 @@ void music() {
       storeNote();
     }
     delay(10);  //delay for stability, prevents too many MIDI messages from being sent, probably ok to remove but I dont notice the difference. Any more than this is noticable when playing
+    //update all readings
+    noteSelect();  //get note
+    //inNotePitchBend();  //only runs if inNotePitch is true, off by default
+    readPressure();  //get the pressure
+    readModWheel();  //get and send the right pressure pad through mod cmd
   }
 }
 
 void loop() {      //The main loop itself doesn't play any music, it does instead control the start behaviour of when plays music
   delay(10);       //same as the delay in music function, reduces MIDI messages, they also wont add since the 2 loops happen seperatly
-  readPressure();  //get the pressure
-  readPosition();  //get position value
+  readPosition();  //get the position
+  readPressure();  //get pressure value
   readModWheel();  //get and send the right pressure pad through mod cmd
 
   oledScreen();
 
-  while ((pressureRibbonRead > lowerPrTr) && (preSoftPotRead > ribbonDeadZone)) {
+  if ((pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone)) {  //this was a while statment which it doesnt need to be??? changed to an if statement now
     music();
   }
 
   if (isOff == false) {
-    noteOff();             //...and turn off the note.
-    if (polyCount == 1) {  //send note off on the current note as well, I think it this solves an issue where rapidally sending note on/off causes issues. I say I think becuase I didn't think it solved the bug but I haven't experienced the bug in a while
-      MIDI.sendNoteOff(noteNum, 0, 1);
-    }
-    if (polyCount == 2) {
-      MIDI.sendNoteOff(noteNum, 0, 1);
-      MIDI.sendNoteOff(noteNum2, 0, 1);
-    }
-    if (polyCount == 3) {
-      MIDI.sendNoteOff(noteNum, 0, 1);
-      MIDI.sendNoteOff(noteNum2, 0, 1);
-      MIDI.sendNoteOff(noteNum3, 0, 1);
-    }
-    if (polyCount == 4) {
-      MIDI.sendNoteOff(noteNum, 0, 1);
-      MIDI.sendNoteOff(noteNum2, 0, 1);
-      MIDI.sendNoteOff(noteNum3, 0, 1);
-      MIDI.sendNoteOff(noteNum4, 0, 1);
-    }
-    if (inNotePitch == true) {
-      resetBend();
+    noteOff();  //...and turn off the note.
+    if (polyModeSeperateChannels == true) {
+      if (polyCount == 1) {
+        MIDI.sendNoteOff(noteNum, 0, 1);
+      } else if (polyCount == 2) {
+        MIDI.sendNoteOff(noteNum, 0, 1);
+        MIDI.sendNoteOff(noteNum2, 0, 2);
+      } else if (polyCount == 3) {
+        MIDI.sendNoteOff(noteNum, 0, 1);
+        MIDI.sendNoteOff(noteNum2, 0, 2);
+        MIDI.sendNoteOff(noteNum3, 0, 3);
+      } else if (polyCount == 4) {
+        MIDI.sendNoteOff(noteNum, 0, 1);
+        MIDI.sendNoteOff(noteNum2, 0, 2);
+        MIDI.sendNoteOff(noteNum3, 0, 3);
+        MIDI.sendNoteOff(noteNum4, 0, 4);
+      }
+    } else {
+      if (polyCount == 1) {
+        MIDI.sendNoteOff(noteNum, 0, MIDIchannel);
+      } else if (polyCount == 2) {
+        MIDI.sendNoteOff(noteNum, 0, MIDIchannel);
+        MIDI.sendNoteOff(noteNum2, 0, MIDIchannel + 2);
+      } else if (polyCount == 3) {
+        MIDI.sendNoteOff(noteNum, 0, MIDIchannel);
+        MIDI.sendNoteOff(noteNum2, 0, MIDIchannel + 2);
+        MIDI.sendNoteOff(noteNum3, 0, MIDIchannel + 3);
+      } else if (polyCount == 4) {
+        MIDI.sendNoteOff(noteNum, 0, MIDIchannel);
+        MIDI.sendNoteOff(noteNum2, 0, MIDIchannel + 2);
+        MIDI.sendNoteOff(noteNum3, 0, MIDIchannel + 3);
+        MIDI.sendNoteOff(noteNum4, 0, MIDIchannel + 4);
+      }
     }
     isOff = true;
   }
-  if ((isOff == true) && (displayUpdateCount >= 0)) {
+  if ((isOff == true) && (displayUpdateCount >= 0)) {  //only check for button updates when the controller is not active
+    //check for button presses
     updateButtons();
-    //check for right button presses
     if (btn3Sts == LOW) {
-
-      buttonPressed = 3;
       idleDisplay();
 
+      //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
       if (noteListSelect == 0) {
-        drawPressed();
+        drawPressed(3);
         updateButtons();
         displayUpdateCount = -1;  //set to -1 to prevent counter from changing so that the key change can be displayed and the controller can still be used
       } else {
-        drawCross();
+        drawCross(3);
         updateButtons();
       }
     } else if (btn2Sts == LOW) {
-      buttonPressed = 2;
       idleDisplay();
-      drawPressed();
+      drawPressed(2);
       AR2Menu();
     } else if (btn1Sts == LOW) {
-      buttonPressed = 1;
       idleDisplay();
-      drawPressed();
       polySettings();
       analogWrite(rLed, 255);
       analogWrite(gLed, 255);
