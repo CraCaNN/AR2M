@@ -346,9 +346,9 @@ void readModWheel() {
     if (pressurePotRhtRead != prevPressurePotRhtRead) {
       for (int i = 1; i <= polyCount; i++) {
         if (polyPlayMultiCh == true) {
-          MIDI.sendControlChange(rhtPotControlChanel, pressurePotLftRead, MIDIchannel + i - 1);  //send modulation command
+          MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel + i - 1);  //send modulation command
         } else {
-          MIDI.sendControlChange(rhtPotControlChanel, pressurePotLftRead, MIDIchannel);  //send modulation command
+          MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel);  //send modulation command
         }
       }
       prevPressurePotRhtRead = pressurePotRhtRead;  //make the prev reading the same as the current one so to fail the check until the readings change
@@ -365,7 +365,9 @@ void readModWheel() {
       }
       prevPressurePotLftRead = pressurePotLftRead;
     }
-  } else {  //use pads as a pitch bend
+  } 
+  
+  else {  //use pads as a pitch bend
     pitchBendValue = rawLeftPad * -4 + rawRightPad * 4;
     if (pitchBendValue != prevPitchBend) {
       if (polyPlayMultiCh == true) {
