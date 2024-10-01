@@ -1,8 +1,5 @@
 # AR2M
-# The Hardware IS NOT FINAL!
-**Currently this project uses the Pico however, I'm highly considering moving to the ESP32 for better bluetooth/Wi-Fi support so wireless play is an option**\
-The ESP32 also has a lot more ADCs than the Pico, which might allow a special version of the modulin at some point
-\
+
 The AR2M (Arduino Ribbon to MIDI) controller is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
 
 This project is made up of the following:
