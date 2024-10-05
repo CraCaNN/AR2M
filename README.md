@@ -1,4 +1,4 @@
-# Quantonium
+# Quantonium/AR2M
 
 The Quantonium (Quantized-Trautonium) is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
 It's also a partial alternative to Doepfers R2M (Ribbon to MIDI system which is no longer in available), with the main difference being that this project is MIDI only and no CV\
