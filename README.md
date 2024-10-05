@@ -1,6 +1,6 @@
-# AR2M
+# AR2M/Quantonium
 
-The AR2M (Arduino Ribbon to MIDI) controller is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
+The AR2M(Arduino Ribbon to MIDI, the code base name)/Quantonium(Quantized-Trautonium, the full instrument name) is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).
 
 This project is made up of the following:
 * 1x wood plank, or something else to put the Arduino, ribbon and pressure pads on.
