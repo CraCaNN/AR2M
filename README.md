@@ -15,14 +15,16 @@ This project is made up of the following:
 
 The softpot controls which note you play, by default this is Quantized to the key of C
 - The key can be changed at any point
-- There is also a pitch bend only mode where only pitch bend after the first note\
+- There is also a pitch bend only mode where only pitch bend after the first note
+
 An FSR (Force Sensitive Resistor) ribbon is positioned underneath the softpot and sends aftertouch depending on how hard you press down on the ribbon, it also helps to prevent **ghost notes**\
-2 smaller FSR pads are positioned at the end of the stick where you hold the instrument and by default send MIDI CC on CC 1&2.\
+\
+2 smaller FSR pads are positioned at the end of the stick where you hold the instrument and by default send MIDI CC on CC 1&2.
 - These can be changed to send pitch bend instead where pressing on the left pad pitches down, whilst the right pad pitches up
 - The FSR pads are not nessasery to play the instrument but **the FSR ribbon IS**
-\
+
 The total cost of parts is ~£100 if you build it from scratch, although I plan on making a sellable version at some point\
-I may sell these as kits or as completed units or both\
+I may sell these as kits or as completed units or both
 
 **Ghost Notes** are a result of not playing the instrument correctly, where the instrument thinks you are playing a note further down the ribbon than you actually are
 To play without creating ghost notes you need to put your finger right on the middle of the position ribbon as lying it across a section will result in ghost notes
