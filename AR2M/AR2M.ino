@@ -4,8 +4,8 @@ Copyright (C) <2024>  <CraCaN>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+the Free Software Foundation, either version 3 of the License, 
+or any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,95 +16,106 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+//Core libraries
 #include <Arduino.h>
 #include <Wire.h>
-#include <Adafruit_TinyUSB.h>
 
+//OLED libraries
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_GrayOLED.h>
 #include <Adafruit_SPITFT.h>
 #include <Adafruit_SPITFT_Macros.h>
 
+//MIDI libraries
+#include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
-
-/*
-ToDo
-
-Rewrite main loop to solve off-on state
-Rewrite poly play and noteOn/Off to use lists instead of individual variables
-
-could do both at the same time to start using local vars
-
-
-*/
 
 
 
 //CONFIG OPTIONS//
 //These options change how the controller behaves and you can modify to set the default behaviour on boot
 
-//Position ribbon
-int sectionSize = 32;  //change the 'size' of the note sections on the ribbon. Increase the number to make the sections bigger or decrease the number to make the sections smaller. make sure you have enough notes in the note list if you nmake the section size smaller
-//Recommended sizes are:
-//32 can fit 4 octaves 2 notes. (Default)
+//change the 'size' of the note sections on the ribbon. Increase the number to make the sections bigger or decrease the number to make the sections smaller. make sure you have enough notes in the note list if you nmake the section size smaller
+int sectionSize = 32;  //Recommended sizes are:
+//32 can fit 4 octaves 3 notes. (Default)
 //28 can fit 5 octaves.
 //23 can fit 6 octaves and a note
-//The above variable does not take into account the variable below so you may have a partial section at the start of the ribbon
-const int ribbonDeadZone = 32;  //The ribbons deadzone size. Since when the ribbon isn't in use the value read drops to a low number, usually less than 10. This is how the controller determines if the ribbon isn't in use. this value works for my ribbon: (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
 
-int offSetKey;     //offset for in key notes, allows you to play in any key
-int octaveOffSet;  //change to play in higher or lower octaves
+//The sectionSize does not take into account ribbonDeadZone so you may have a partial note at the start of the ribbon
+//The ribbons deadzone size. Since when the ribbon isn't in use the value read drops to a low number, usually less than 10. This is how the controller determines if the ribbon isn't in use. this value works for my ribbon: (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
+const int ribbonDeadZone = 32;
 
-int offSetSharp = 27;  //offset for sharp notes, may remove at some point
+//offset for in key notes, allows you to play in any key
+int offSetKey;
+//change to play in higher or lower octaves
+int octaveOffSet;
 
-bool isPadRequired = true;  //Set to false if you want to play music with just the ribbon can be toggled on or off on the menu
+//offset for sharp notes
+int offSetSharp = 27;
 
-bool inNotePitch = false;     //Enables or disables the pitch bend effect within each note section
-bool padPitchBend = false;    //Disables MIDI CC on the left and right pressure pads, and changes it into a funky pitch bend wheel
-const int countToPitch = 50;  //How long the program will count before allowing pitch bend. NOT IN ms.
+//Enables or disables the pitch bend effect within each note section, currently broken will work on if I can get MIDI 2.0/MPE to work
+bool inNotePitch = false;
+
+//Trautonium mode will mess up if you try to also have this on, only have one or the other
+//Disables MIDI CC on the left and right pressure pads, and changes it into a funky pitch bend wheel
+bool padPitchBend = false;
+//How long the program will count before allowing pitch bend. NOT IN ms.
+const int countToPitch = 50;
 
 //Aftertouch ribbon
 const int upperPres = 900;  // set the max aftertouch to the ribbon reading
 const int lowerPrTr = 500;  //set the minimum amount of pressure needed for the pressure ribon to activate
 const int prBuffer = 600;   //the amount of pressure required to send any aftertouch
 
-int MIDIchannel = 1;                   //set the default MIDI channel to send
-bool polyModeSeperateChannels = true;  //if true sends the different poly notes down different MIDI channels
+//set the default MIDI channel to send
+int MIDIchannel = 1;
+//if true sends the different poly notes down different MIDI channels
+bool polyModeSeperateChannels = true;
 
 //Control change pads
-int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the right pad. 1 = Modulation wheel, 74 = Equator height/slide
-int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the left pad.  1 = Modulation wheel, 74 = Equator height/slide
+int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the right pad. Examples: 1 = Modulation wheel, 74 = Equator height/slide
+int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the left pad.
 
-const int upperPresPads = 900;  //set the max MIDI CC values for the pads at that pad reading
+//set the max MIDI CC values for the pads at that pad reading
+const int upperPresPads = 900;
 
 //Poly Play. Works best when in Diatonic mode, plays notes 2 above the current note played on the ribbon. Repeates for the number in the variable
-int polyCount = 1;  //MUST BE between 1-4. Number of poly channels supports. Can be changed in the menu
+int polyCount = 1;  //Should be between 1-4. Absolute max is 16! Number of poly channels sent. Could be higher if you wanted to make a chord longer than 4 notes.
+//Many things will probably break if this becomes more than 4
 
+//DYNAMIC VARS//Variables that can change but not while playing the controller//
+int polyChord[4] = { 0, 12, 24 };
+//Some chords support either 3 or 4, this prevents the user from increasing the poly send count above the supported chord count
+int maxPolyCount = 3;
 
 //Set poly plays channel output mode
 bool polyPlayMultiCh = true;
+
+//Enbale trautonium mode - send continuous pitch bend for a traditional trautonium glide. Must have a suitable patch set in your synthesizer
+bool trautonium = false;
+//Using pads pitch bend will break this consider using one or the other
 
 //Debuging
 const bool debug = false;  //set to true to show more variables on the OLED
 
 //determines what list is currently in use, 0 is diatonic, 1 is chromatic
-bool noteListSelect;
+bool noteListSelect = 0;
 //END OF CONFIG OPTIONS//
 
-//BOARD OPTIONS//
-//These options are to match how you might have wired up your own controller
+//BOARD OPTIONS//These options are to match how you might have wired up your own controller
+
 const int softpotPin = A0;         //position ribbon pin
 const int pressurePotPinLft = A1;  //pressure pad right pin
 const int pressurePotPinRht = A2;  //pressure pad right pin
 const int pressureRibbon = A3;     //aftertouch ribbon
 
 //Button Pins
-const int btn3 = 5;
-const int btn2 = 6;
 const int btn1 = 7;
+const int btn2 = 6;
+const int btn3 = 5;
 
-//LEDs for Tiny2040
+//RGB LED for Tiny2040
 const int rLed = 18;
 const int gLed = 19;
 const int bLed = 20;
@@ -112,43 +123,80 @@ const int bLed = 20;
 //OLED SDA/SCL pins
 const int oledSDApin = 0;
 const int oledSCLpin = 1;
-
 //END OF BOARD OPTIONS//
 
 
-//CODE BEGIN//
-//Yes I know I'm not using any local variables, however I did this project initially to get back into Arduino and had no idea how to do that at the time, and I think I would still make a lot of the variables global anyway
+//CODE BEGIN//Mostly Global variables required for performing music logic and the interface logic
+
+//MUSIC VARS//Variables that are expected to change under normal use//
 int preSoftPotRead;   //preSoftPotRead is the reading used before it is processed to be sent as a MIDI message, I need both to be able to detect more accuratly where the position is
 int softPotReading;   //this is the presoftpotread deivided by the sectionsize variable to get a final position of where your finger is
 int ribbonIndicator;  //Makes the turning on/off of the DLED look neater when the ribbon is activated
 
-int pressureRibbonRead;
+int pressureRibbonRead;  //The raw pressure data from the main ribbon
+int noteVelo;            //The formatted data for pressure ribbon to send to aftertouch
+int prevNoteVelo;        //Prevent sending the same pressure values
 
-int pressurePotRhtRead;
-int prevPressurePotRhtRead;
-int rawRightPad;
+int pressurePotRhtRead;      //formatted right pressure pot read
+int prevPressurePotRhtRead;  //previous value of formatted data to prevent repeated sends
+int rawRightPad;             //the raw right pad data for visualisation
 
-int pressurePotLftRead;
-int prevPressurePotLftRead;
-int rawLeftPad;
+int pressurePotLftRead;      //formatted left pressure pot read
+int prevPressurePotLftRead;  //previous value of formatted data to prevent repeated sends
+int rawLeftPad;              //the raw left pad data for visualisation
 
+bool isActive = false;  //Helps to determine whether to note on, change note or note off. Also prevents the sending of infinate note offs
+
+int totalOffSet = 0;  //store the total offset to prevent recalculating it for every note
 
 //status of the buttons
-int btn3Sts = LOW;
-int btn2Sts = LOW;
-int btn1Sts = LOW;
+int btn1Sts = HIGH;  //state of button 1, LOW is pressed
+int btn2Sts = HIGH;  //state of button 2, LOW is pressed
+int btn3Sts = HIGH;  //state of button 3, LOW is pressed
 
-//int buttonPressed = 0;  //helps determine which button was pressed to draw on the display
+//Variables for in note pitch shift
+int pitchCount;                    //count to incrament until matched with countToPitch
+int inNotePos;                     //remember the inital position
+bool hasPitchBendStarted = false;  //to help determine the status of pitch bending
+int pitchBendValue;                //amount to pitch bend by
+int prevPitchBend;
 
-int noteVelo;      //The reading given by the pressure ribbon, currently programmed to output through the MIDI aftertouch command
-int prevNoteVelo;  //Prevent sending the same pressure commands
+//Variables used for trautonium mode
+int initialPos;
+int bendAmount;
 
-//this is all of the non sharp notes from C2 to around C6 essentially the key of C
+//noteNums is the note(s) that is currently playing
+int noteNums[4];
+
+//prevNoteNums is also the current note(s) playing but is not updated when a new note is played. This helps the controller to determine which note to turn off
+int prevNoteNums[4];
+
+//LED
+int sleepLed = 255;        //fade the led when OLED is inactive
+bool sleepLedDir = false;  //allows the led to fade up and down without going to max brightness
+
+int superBreak = 0;  //Helps me get out of deep sub menus
+
+
+//NOTE LISTS//Lists to reference from to get the note to play
+
+//Diatonic scale of notes in the key of C from C2 to C6
 const int noteNumberList[] = {
   36, 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71,
   72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108
-};  //C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
+};
+//C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
 
+//Chromatic scale of notes
+const int noteNumListSharp[] = {
+  21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+  41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+  61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+  81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96
+};
+
+
+//OLED VARS//Variables needed for viualisation purposes
 
 //the list below contains every midi note number in letter form for visualisation purposes
 const char* noteNumNameNoSharp[] = {
@@ -165,77 +213,35 @@ const char* noteNumNameNoSharp[] = {
   "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "MAX", "MAX", "MAX", "MAX",
   "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX"
 };
-const char* keyList[] = { "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B " };  //for visualisation purposes only
 
-//These are all of the notes from A0. The sharp notes on the ribbon didnt sound right to me especially with the portamento effect but its probably because im not skilled enough
-const int noteNumListSharp[] = {
-  21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-  41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
-  61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
-  81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96
-};
-//Also probably wouldn't sound right with poly mode due to the way I've programmed poly mode
-
-bool isActive = false;  //part of music logic rewrite
-
-//Variables for in note pitch shift, settings can be found at top of program
-int pitchCount;                    //count to incrament until matched with countToPitch
-int inNotePos;                     //remember the inital position
-bool hasPitchBendStarted = false;  //to help determine the status of pitch bending
-int pitchBendValue;                //amount to pitch bend by
-int prevPitchBend;
-
-
-//noteNums is the note(s) that is currently playing
-int noteNums[4];
-
-//prevNoteNums is also the current note(s) playing but is not updated when a new note is played. This helps the controller to determine which note to turn off
-int prevNoteNums[4];
-
-int totalOffSet = 0;  //store the total offset to prevent recalculating it for every note
-
-//for the new chord system
-// Technically you are playing poly note 1
-int polyChord[4] = { 0, 12, 24 };
-
-//Some chords support either 3 or 4, this prevents the user from sending more than the supported chord count
-int maxPolyCount = 3;
-
-
-
-//LED
-int sleepLed = 255;        //fade the led when OLED is inactive
-bool sleepLedDir = false;  //allows the led to fade up and down without going to max brightness
-
-//OLED
-//OLED variables
+//For use when you are changing key in changeKey()
+const char* keyList[] = { "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B " };  //for visualisation purposes only
 
 //make it easier for the visuliser to know what note is being played without having to go through a lengthy looking line of code every time
 int currentNote = 0;
 
-int displayUpdateCount = 0;  //determines what is shown on the OLED during idle states
-int blinkPixel = false;      //one pixel on the screen blinks to show when the screen is redrawn, used to be more visable on the UNO R3 but now blinks very quickly thanks to the pico
+int displayCount = 0;  //determines what is shown on the OLED
 
-int superBreak = 0;  //Helps me get out of deep sub menus
-int menuDepth = 0;   //used to keep track of where how many levels deep im in a submenu, could be used to replace superBreak
+int blinkPixel = false;  //one pixel on the screen blinks to show when the screen is redrawn, used to be more visable on the UNO R3 but now blinks very quickly thanks to the pico
+
 
 //Show the position of the ribbon as a bar
 const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
+//width of the ribbon on the OLED / ((total ribbon size - the ribbon deadzone) / the note section size)
+
+//The position of the ribbon indicator
 int ribbonDisplayPos = 0;
 
-//OLED Setup
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 32  // OLED display height, in pixels
+//END OF VARIABLE SETUP//
 
-#define OLED_RESET -1        // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C  ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+//Create display instance
+Adafruit_SSD1306 display(128, 32, &Wire, -1);
 
 //Send MIDI over USB instead of serial
 Adafruit_USBD_MIDI usb_midi;  // USB MIDI object
-// Create a new instance of the Arduino MIDI Library,
-// and attach usb_midi as the transport.
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
+
 
 void setup() {
   USBDevice.setManufacturerDescriptor("Arduino Ribbon to MIDI");
@@ -246,13 +252,15 @@ void setup() {
   pinMode(gLed, OUTPUT);
   pinMode(bLed, OUTPUT);
 
+  //display.setRotation(2);
+
   //Serial.begin(31250);
 
   //Initiate OLED
   Wire.setSDA(oledSDApin);
   Wire.setSCL(oledSCLpin);
-  display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
-  display.clearDisplay();  //clear display
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  //0x3D for 128x64, 0x3C for 128x32
+  display.clearDisplay();                     //clear display
   display.display();
   //display.setTextWrap(false);
 
@@ -270,16 +278,15 @@ void setup() {
   digitalWrite(btn2, HIGH);
   digitalWrite(btn1, HIGH);
 
-  //sometimes I get better readings when the pins are set to high sometimes they don't change, seems to be micro-controller dependant
   digitalWrite(softpotPin, HIGH);
   //digitalWrite(pressureRibbon, HIGH);
   //digitalWrite(pressurePotPinRht, HIGH);
 
-  displayUpdateCount = 100;  //prevents the liveInfo screen showing instantly after boot. Looks neater in my opinion
+  displayCount = 100;  //prevents the liveInfo screen showing instantly after boot. Looks neater in my opinion
   display.setCursor(0, 0);
   display.print("AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.3.0");  // will update this in every version hopefully
+  display.print("Version 2.4.0");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -365,8 +372,8 @@ void readModWheel() {
       }
       prevPressurePotLftRead = pressurePotLftRead;
     }
-  } 
-  
+  }
+
   else {  //use pads as a pitch bend
     pitchBendValue = rawLeftPad * -4 + rawRightPad * 4;
     if (pitchBendValue != prevPitchBend) {
@@ -382,8 +389,9 @@ void readModWheel() {
   }
 }
 
-//I plan on rewriting pitch bend when I figure out MIDI 2.0/MPE/UMP as that would solve ALL of the issues that I currently have with the global pitch bend
-//Currently pitch bending is kinda scuffed but it sort of works.
+/*Disabled until MIDI 2.0/MPE
+//I plan on rewriting in note pitch bend when I figure out MIDI 2.0/MPE/UMP as that would solve ALL of the issues that I currently have with the global pitch bend
+//After rewritting the music logic this will no longer work but never really did in the first place
 void inNotePitchBend() {
   if (inNotePitch == true) {  //only run if inNotePitch is set to true, skip if false
     //Because a delay would prevent me from changing notes i need to count up to a variable to match another this allows me to wait and still use the controller whilst this is happening. Same concept behind the red led flash
@@ -409,6 +417,7 @@ void resetBend() {              //I had this coppied 4 times, put it in a functi
   inNotePos = 0;
   MIDI.sendPitchBend(0, 1);  //send a pitch bend value of 0 to make the new note sound more accurate
 }
+*/
 
 //gets the current position of the position ribbon also calculates any offsets, deals with indicator LED as well
 void readPosition() {
@@ -432,25 +441,26 @@ void readPosition() {
 //gets the ribbon position and the note number. Deals with poly modes as well
 void noteSelect() {
   softPotReading = preSoftPotRead / sectionSize;  //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
-  if (noteListSelect == 0) {
-    for (int i = 1; i <= polyCount; i++) {
-      noteNums[i - 1] = constrain(noteNumberList[softPotReading] + totalOffSet + polyChord[i - 1], 0, 127);
+  if (noteListSelect == 0) {                      //if playing in diatonic
+    for (int i = 1; i <= polyCount; i++) {        //only loop for the number of poly notes that there are
+
+      noteNums[i - 1] = constrain(noteNumberList[softPotReading] + totalOffSet + polyChord[i - 1], 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
     }
-  } else {
+  } else {  //if playing in chromatic
     for (int i = 1; i <= polyCount; i++) {
-      noteNums[i - 1] = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);
+      noteNums[i - 1] = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
     }
   }
 }
 
 //sends the MIDI note on command, deals with POLY mode
 void noteOn() {
-  if (polyPlayMultiCh == true) {
+  if (polyPlayMultiCh == true) {  //if playing in multiple channel mode
     for (int i = 1; i <= polyCount; i++) {
       MIDI.sendNoteOn(noteNums[i - 1], 127, MIDIchannel + i - 1);
     }
   } else {
-    for (int i = 1; i <= polyCount; i++) {
+    for (int i = 1; i <= polyCount; i++) {  //otherwise send MIDI down the same channel
       MIDI.sendNoteOn(noteNums[i - 1], 127, MIDIchannel);
     }
   }
@@ -458,24 +468,25 @@ void noteOn() {
 
 //sends the MIDI note off command, deals with POLY mode
 void noteOff() {
-  if (polyPlayMultiCh == true) {
+  if (polyPlayMultiCh == true) {  //if playing in multiple channel mode
     for (int i = 1; i <= polyCount; i++) {
       MIDI.sendNoteOff(prevNoteNums[i - 1], 127, MIDIchannel + i - 1);
     }
-  } else {
+  } else {  //otherwise send MIDI down the same channel
     for (int i = 1; i <= polyCount; i++) {
       MIDI.sendNoteOff(prevNoteNums[i - 1], 127, MIDIchannel);
     }
   }
 }
 
-//sends the MIDI note off command for sending the note off of a current note, used to deactivate the proper notes when fullt releasing the controller
+//Practically the function bellow isn't needed but there could be a chance where the note is changed then the controller sends that note off on the wrong note. but to be on the safe side, this function exists
+//sends the MIDI note off command for sending the note off of a current note, used to deactivate the proper notes when fully releasing the controller
 void noteOffCurrrent() {
   if (polyPlayMultiCh == true) {
-    for (int i = 1; i <= polyCount; i++) {
+    for (int i = 1; i <= polyCount; i++) {  //if playing in multiple channel mode
       MIDI.sendNoteOff(noteNums[i - 1], 127, MIDIchannel + i - 1);
     }
-  } else {
+  } else {  //otherwise send MIDI down the same channel
     for (int i = 1; i <= polyCount; i++) {
       MIDI.sendNoteOff(noteNums[i - 1], 127, MIDIchannel);
     }
@@ -484,16 +495,15 @@ void noteOffCurrrent() {
 
 
 //stores the current note so when a new note is played the controller knows which note to turn off
-void storeNote() {
-  prevNoteNums[0] = noteNums[0];
-  prevNoteNums[1] = noteNums[1];
-  prevNoteNums[2] = noteNums[2];
-  prevNoteNums[3] = noteNums[3];
+void storeNote() {                        //I'm sure that there is a better way of doing this but whatever
+  for (int i = 1; i <= polyCount; i++) {  //only run for the number of poly notes
+    prevNoteNums[i - 1] = noteNums[i - 1];
+  }
 }
 
 //END OF MUSIC FUNCTIONS////
 
-////START OF OLED CODE//
+//START OF OLED CODE//
 
 //updadte button status
 void updateButtons() {
@@ -546,6 +556,16 @@ void drawCross(int buttonPressed) {
   }
 }
 
+//Simplify some of the code, mostly in AR2Menu
+void threeLine(const char* line1, const char* line2, const char* line3) {
+  display.setCursor(0, 0);
+  display.print(line1);
+  display.setCursor(0, 12);
+  display.print(line2);
+  display.setCursor(0, 24);
+  display.print(line3);
+}
+
 //blink one pixel on the display so I can see when it's being updated and if the program is frozen
 void screenBlink() {
   if (debug == true) {  //only turn on if debugging is on
@@ -583,12 +603,7 @@ void AR2Menu() {
   ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
   while (true) {
     display.clearDisplay();
-    display.setCursor(0, 0);
-    display.print("Exit AR2M Menu --->");
-    display.setCursor(0, 12);
-    display.print("Ribbon Scale ----->");  //used to enable/disable position ribbon only mode, this is no longer needed and will be used at some point
-    display.setCursor(0, 24);
-    display.print("Next Menu (1/3) -->");
+    threeLine("Exit AR2M Menu --->", "Ribbon Scale ----->", "Next Menu (1/4) -->");
     drawButtons();
 
     display.display();
@@ -597,7 +612,7 @@ void AR2Menu() {
     if (btn1Sts == LOW) {  //exits the menu and returns to the idle screens
       drawPressed(1);
       updateButtons();
-      displayUpdateCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
+      displayCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
       analogWrite(rLed, 255);
       analogWrite(bLed, 255);
       break;
@@ -606,18 +621,11 @@ void AR2Menu() {
       drawPressed(2);
       while (true) {
         display.clearDisplay();
-        display.setCursor(0, 0);
-        display.print("Ribbon mode select ");
-        display.setCursor(0, 12);
         if (noteListSelect == 0) {  //show star to represent the current active mode
-          display.print("Diatonic <- ------>");
-          display.setCursor(0, 24);
-          display.print("Chromatic -------->");
+          threeLine("Ribbon mode select ", "Diatonic <- ------>", "Chromatic -------->");
         } else {
-          display.print("Diatonic --------->");
-          display.setCursor(0, 24);
-          display.print("Chromatic <- ----->");
-          polyCount = 1;  //since poly play isn't relly supported in Chromatic mode, it needs to be disabled
+          threeLine("Ribbon mode select ", "Diatonic --------->", "Chromatic <- ----->");
+          polyCount = 1;  //since poly play isn't relly supported in Chromatic mode, it needs to be disabled. It would work but would sound very out of tune
         }
         drawButtons();
         display.display();
@@ -659,7 +667,7 @@ void AR2Menu() {
         display.setCursor(108, 12);
         display.print(">");
         display.setCursor(0, 24);
-        display.print("Next Menu (2/3) -->");
+        display.print("Next Menu (2/4) -->");
         drawButtons();
 
         display.display();
@@ -840,7 +848,7 @@ void AR2Menu() {
             display.setCursor(0, 12);
             display.print("Poly MIDI Ch ----->");
             display.setCursor(0, 24);
-            display.print("Next Menu (3/3)--->");
+            display.print("Next Menu (3/4)--->");
             display.display();
             if (btn1Sts == LOW) {
               drawPressed(1);
@@ -854,20 +862,10 @@ void AR2Menu() {
               while (true) {
                 if (polyPlayMultiCh == true) {
                   display.clearDisplay();
-                  display.setCursor(0, 0);
-                  display.print("Poly Play Chan Mode");
-                  display.setCursor(0, 12);
-                  display.print("Send diff chan<- ->");
-                  display.setCursor(0, 24);
-                  display.print("Send same chan --->");
+                  threeLine("Poly Play Chan Mode", "Send diff chan<- ->", "Send same chan --->");
                 } else {
                   display.clearDisplay();
-                  display.setCursor(0, 0);
-                  display.print("Poly Play Chan Mode");
-                  display.setCursor(0, 12);
-                  display.print("Send diff chan --->");
-                  display.setCursor(0, 24);
-                  display.print("Send same chan<- ->");
+                  threeLine("Poly Play Chan Mode", "Send diff chan --->", "Send same chan<- ->");
                 }
                 drawButtons();
                 display.display();
@@ -880,8 +878,8 @@ void AR2Menu() {
                 if (btn2Sts == LOW) {
                   drawPressed(2);
                   updateButtons();
-                  if (MIDIchannel > 13) {  //warn the user that the MIDI channel has changed in order to fit poly notes. I really dont see when this would be an issue since I've created my own MIDI line so no other devices should share these channels, but a good failsafe
-                    MIDIchannel = 13;
+                  if (MIDIchannel > 16 - polyCount) {  //warn the user that the MIDI channel has changed in order to fit poly notes. I really dont see when this would be an issue since I've essentially created my own MIDI line so no other devices should share these channels, but a good failsafe
+                    MIDIchannel = 16 - polyCount;
                     polyPlayMultiCh = true;
                     display.clearDisplay();
                     display.fillRect(0, 0, 128, 32, 1);
@@ -889,7 +887,7 @@ void AR2Menu() {
                     display.setCursor(1, 1);
                     display.print("Warning: MIDI is now");
                     display.setCursor(1, 12);
-                    display.print("Ch 13 to fit multiple");
+                    display.print("Ch" + String(16 - polyCount) + "to fit multiple");
                     display.setCursor(1, 23);
                     display.print("poly notes!");
                     display.display();
@@ -912,7 +910,46 @@ void AR2Menu() {
               }
             } else if (btn3Sts == LOW) {
               drawPressed(3);
-              superBreak = 2;
+              updateButtons();
+              while (true) {
+                if (superBreak > 0) {
+                  superBreak--;
+                  break;
+                }
+                display.clearDisplay();
+                display.setCursor(0, 0);
+                if (trautonium == true) {
+                  display.print("Trautonium is on ->");
+                } else {
+                  display.print("Trautonium is off >");
+                }
+                display.setCursor(0, 12);
+                display.print("------------------>");
+                display.setCursor(0, 24);
+                display.print("Next Menu (4/4) -->");
+                drawButtons();
+                updateButtons();
+                display.display();
+                if (btn1Sts == LOW) {
+                  drawPressed(1);
+                  updateButtons();
+                  if (trautonium == true) {
+                    trautonium = false;
+                    MIDI.sendPitchBend(0, 1);  //reset pitch bend to prevent random issues in the synthesizers
+                  } else {
+                    trautonium = true;
+                  }
+                }
+                if (btn2Sts == LOW) {
+                  drawCross(2);
+                  updateButtons();
+                }
+                if (btn3Sts == LOW) {
+                  drawPressed(3);
+                  updateButtons();
+                  superBreak = 3;
+                }
+              }
             }
           }
         }
@@ -933,8 +970,8 @@ void polySettings() {
     ribbonIndicator = 0;  //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
     while (true) {
       if (superBreak > 0) {
-        superBreak = 0;            //since this is the last break set superBreak to 0 incase of any negative or positive number
-        displayUpdateCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
+        superBreak = 0;      //since this is the last break set superBreak to 0 incase of any negative or positive number
+        displayCount = 100;  //prevents the liveInfo screen showing if button is pressed early on
         break;
       }
       display.clearDisplay();
@@ -1016,12 +1053,7 @@ void polySettings() {
               }
               display.clearDisplay();
               drawButtons();
-              display.setCursor(0, 0);
-              display.print("3 Oct      1,8,15 >");
-              display.setCursor(0, 12);
-              display.print("Major 6   1,3,5,6 >");
-              display.setCursor(0, 24);
-              display.print("Next (1/3)-------->");
+              threeLine("3 Oct      1,8,15 >", "Major 6   1,3,5,6 >", "Next (1/3)-------->");
               updateButtons();
               display.display();
               if (btn1Sts == LOW) {
@@ -1051,12 +1083,7 @@ void polySettings() {
                   }
                   display.clearDisplay();
                   drawButtons();
-                  display.setCursor(0, 0);
-                  display.print("Dom 7    1,3,5,b7 >");
-                  display.setCursor(0, 12);
-                  display.print("Major 7   1,3,5,7 >");
-                  display.setCursor(0, 24);
-                  display.print("Next (2/3)-------->");
+                  threeLine("Dom 7    1,3,5,b7 >", "Major 7   1,3,5,7 >", "Next (2/3)-------->");
                   updateButtons();
                   display.display();
                   if (btn1Sts == LOW) {
@@ -1085,12 +1112,7 @@ void polySettings() {
                       }
                       display.clearDisplay();
                       drawButtons();
-                      display.setCursor(0, 0);
-                      display.print("Aug        1,3,#5 >");
-                      display.setCursor(0, 12);
-                      display.print("Exit ------------->");
-                      display.setCursor(0, 24);
-                      display.print("Next (3/3) ------->");
+                      threeLine("Aug        1,3,#5 >", "Exit ------------->", "Next (3/3) ------->");
                       updateButtons();
                       display.display();
                       if (btn1Sts == LOW) {
@@ -1128,12 +1150,7 @@ void polySettings() {
               }
               display.clearDisplay();
               drawButtons();
-              display.setCursor(0, 0);
-              display.print("Minor      1,b3,5 >");
-              display.setCursor(0, 12);
-              display.print("Minor 6  1,b3,5,6 >");
-              display.setCursor(0, 24);
-              display.print("Next (1/3)-------->");
+              threeLine("Minor      1,b3,5 >", "Minor 6  1,b3,5,6 >", "Next (1/3)-------->");
               updateButtons();
               display.display();
               if (btn1Sts == LOW) {
@@ -1164,12 +1181,7 @@ void polySettings() {
                   }
                   display.clearDisplay();
                   drawButtons();
-                  display.setCursor(0, 0);
-                  display.print("Dim 7   1,b3,b5,7 >");
-                  display.setCursor(0, 12);
-                  display.print("Minor 7  1,b3,5,b7>");
-                  display.setCursor(0, 24);
-                  display.print("Next (2/3)-------->");
+                  threeLine("Dim 7   1,b3,b5,7 >", "Minor 7  1,b3,5,b7>", "Next (2/3)-------->");
                   updateButtons();
                   display.display();
                   if (btn1Sts == LOW) {
@@ -1198,12 +1210,7 @@ void polySettings() {
                       }
                       display.clearDisplay();
                       drawButtons();
-                      display.setCursor(0, 0);
-                      display.print("Dim       1,b3,b5 >");
-                      display.setCursor(0, 12);
-                      display.print("Cancel ----------->");
-                      display.setCursor(0, 24);
-                      display.print("Next (3/3) ------->");
+                      threeLine("Dim       1,b3,b5 >", "Cancel ----------->", "Next (3/3) ------->");
                       updateButtons();
                       display.display();
                       if (btn1Sts == LOW) {
@@ -1270,20 +1277,20 @@ void changeKeyOct() {
     updateButtons();
 
     if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
-      displayUpdateCount = 0;
+      displayCount = 0;
     } else {
-      displayUpdateCount = 100;
+      displayCount = 100;
     }
   }
   if (btn2Sts == LOW) {  //change key
     drawPressed(2);
     updateButtons();
-    displayUpdateCount = -2;  //-2 to indicate to oledScreen to show the changeKey screen
+    displayCount = -2;  //-2 to indicate to oledScreen to show the changeKey screen
   }
   if (btn3Sts == LOW) {  //change octaves
     drawPressed(3);
     updateButtons();
-    displayUpdateCount = -3;  //-3 to indicate to oledScreen to show the changeOct screen
+    displayCount = -3;  //-3 to indicate to oledScreen to show the changeOct screen
   }
 }
 
@@ -1308,7 +1315,7 @@ void changeKey() {
   updateButtons();
   if (btn1Sts == LOW) {
     drawPressed(1);
-    displayUpdateCount = -1;  //reset display count to show the normal screen
+    displayCount = -1;  //reset display count to show the normal screen
   }
 
   else if (btn2Sts == LOW) {
@@ -1359,7 +1366,7 @@ void changeOct() {
   display.display();
   if (btn1Sts == LOW) {
     drawPressed(1);
-    displayUpdateCount = -1;  //reset display count to show the normal screen
+    displayCount = -1;  //reset display count to show the normal screen
   }
 
   else if (btn2Sts == LOW) {
@@ -1467,8 +1474,11 @@ void liveInfo() {
       currentNote = noteNumListSharp[preSoftPotRead / sectionSize] + offSetSharp;
     }
 
+
+
+
     if (String(noteNumNameNoSharp[currentNote]).length() == 3) {  //if the note contains a sharp XOR a minus then change the position of the big note
-      if (isActive == true) {                                     //if the controller is sending midi then invert the big note number
+      if (isActive == true) {                 //if the controller is sending midi then invert the big note number
         display.setTextSize(3);
         display.setCursor(38, 1);
         display.setTextColor(0);
@@ -1480,8 +1490,8 @@ void liveInfo() {
         display.setCursor(38, 1);
         display.print(noteNumNameNoSharp[currentNote]);
       }
-    } else if (String(noteNumNameNoSharp[currentNote]).length() == 4) {  //if the note contains a shard AND a minus then change the text size and reposition the big note
-      if (isActive == true) {                                            //if the controller is sending midi then invert the big note number
+    } else if (String(noteNumNameNoSharp[currentNote]).length() >= 4) {  //if the note contains a shard AND a minus then change the text size and reposition the big note
+      if (isActive == true) {                        //if the controller is sending midi then invert the big note number
         display.setTextSize(2);
         display.setCursor(42, 5);
         display.setTextColor(0);
@@ -1552,31 +1562,31 @@ void liveInfo() {
 
 //Handles which function is called depending on different input/variable states
 void oledScreen() {
-  if (displayUpdateCount < 0) {  //check first that there isnt any negatives which indicate a special screen function
-    if (displayUpdateCount == -1) {
+  if (displayCount < 0) {  //check first that there isnt any negatives which indicate a special screen function
+    if (displayCount == -1) {
       changeKeyOct();
-    } else if (displayUpdateCount == -2) {
+    } else if (displayCount == -2) {
       changeKey();
-    } else if (displayUpdateCount == -3) {
+    } else if (displayCount == -3) {
       changeOct();
     }
   } else if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
-    displayUpdateCount = 0;
+    displayCount = 0;
   }
   if (debug == false) {
-    if ((displayUpdateCount >= 0) && (displayUpdateCount < 100)) {  //show the live info display a bit after the controller has finished playing notes
+    if ((displayCount >= 0) && (displayCount < 100)) {  //show the live info display a bit after the controller has finished playing notes
       liveInfo();
-      displayUpdateCount++;
+      displayCount++;
       analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
       sleepLed = 255;          //reset sleep vars to make it neater
       sleepLedDir = false;
-    } else if ((displayUpdateCount >= 0) && (displayUpdateCount < 1000)) {  //otherwise show the menu display
+    } else if ((displayCount >= 0) && (displayCount < 1000)) {  //otherwise show the menu display
       idleDisplay();
-      displayUpdateCount++;
+      displayCount++;
       analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
       sleepLed = 255;          //reset sleep vars to make it neater
       sleepLedDir = false;
-    } else if ((displayUpdateCount >= 0) && (displayUpdateCount >= 1000)) {
+    } else if ((displayCount >= 0) && (displayCount >= 1000)) {
       display.clearDisplay();
       display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
       sleep();            //show blue led to indicate sleep like state
@@ -1590,41 +1600,50 @@ void oledScreen() {
 //MUSIC LOGIC CODE//
 //put the main music logic part of the code in a function seperate from the main loop so I can control the start behaviour a bit easier
 void music() {
-  readPosition();
-  readPressure();
-  noteSelect();
+  readPosition();                                                                                        //get position
+  readPressure();                                                                                        //get pressure
+  readModWheel();                                                                                        //update pressure pads
+  noteSelect();                                                                                          //get the note from the position data
   if ((pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone) && (isActive == false)) {  //check for a first time note (i.e. playing from nothing)
-    noteOn();
+    noteOn();                                                                                            //send
     storeNote();
     isActive = true;
+    initialPos = preSoftPotRead;  //for trautonium mode
   }
-  if ((noteNums[0] != prevNoteNums[0]) && (pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone) && (isActive == true)) {  //if there is a change of notes and the controller is still active
-    noteOn();                                                                                                                               //send new note
-    delay(10);                                                                                                                              //wait a bit for stability
-    noteOff();                                                                                                                              //then turn off the previous note
-    storeNote();
+  if (trautonium == false) {  //If trautonium mode is disabled, run normally
+
+    if ((noteNums[0] != prevNoteNums[0]) && (pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone) && (isActive == true)) {  //if there is a change of notes and the controller is still active
+
+      noteOn();     //send new note
+      delay(10);    //wait a bit for stability. Not for the controllers stability, but I've found that DAWs sometimes don't record the transition properly since they see the note off then new note with a tiny gap. Adding a delay gives time for the DAW to register the new note first
+      noteOff();    //then turn off the previous note
+      storeNote();  //Store the new note so it can be turned off later
+    }
+  } else {  //if trautonium is enabled do pitch bend instead of note on/off
+    MIDI.sendPitchBend((preSoftPotRead - initialPos) * 8, 1);
+    delay(5);  //Delay for stability
   }
   if (((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) && (isActive == true)) {  //check if the controller is no longer being used
     isActive = false;
     noteOff();
     noteOffCurrrent();
   }
-  oledScreen();
 }
 
-void loop() {  //The main loop itself doesn't play any music, it does instead control the start behaviour of when plays music
+void loop() {  //The main loop itself doesn't play any music, it did controll the start behaviour
   music();
-  readModWheel();
+  oledScreen();
 
-  if ((isActive == false) && (displayUpdateCount >= 0)) {  //only check for button updates when the controller is not active
+
+  if ((isActive == false) && (displayCount >= 0)) {  //only check for button updates when the controller is not active
     updateButtons();
     if (btn3Sts == LOW) {
       idleDisplay();
-      
-      if (noteListSelect == 0) {//only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
+
+      if (noteListSelect == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
         drawPressed(3);
         updateButtons();
-        displayUpdateCount = -1;  //set to -1 to prevent counter from changing so that the key change can be displayed and the controller can still be used
+        displayCount = -1;  //set to -1 to prevent counter from changing so that the key change can be displayed and the controller can still be used
       } else {
         drawCross(3);
         updateButtons();
