@@ -27,59 +27,43 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Adafruit_SPITFT.h>
 #include <Adafruit_SPITFT_Macros.h>
 
-//MIDI libraries
+//MIDI/MIDI related libraries
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 
 
 
+
 //CONFIG OPTIONS//
 //These options change how the controller behaves and you can modify to set the default behaviour on boot
-
 //change the 'size' of the note sections on the ribbon. Increase the number to make the sections bigger or decrease the number to make the sections smaller. make sure you have enough notes in the note list if you make the section size smaller
 int sectionSize = 32;
 //Recommended sizes are:
 //32 can fit 4 octaves 3 notes. (Default)
 //28 can fit 5 octaves.
 //23 can fit 6 octaves and a note
-
 //The sectionSize does not take into account ribbonDeadZone so you may have a partial note at the start of the ribbon
-//The ribbons deadzone size. Since when the ribbon isn't in use the value read drops to a low number, usually less than 10. This is one of the ways how the controller determines if the ribbon isn't in use. this value works for my ribbon: (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
-const int ribbonDeadZone = 32;
 
 //offset for in key notes, allows you to play in any key
 int offSetKey;
 //change to play in higher or lower octaves
 int octaveOffSet;
-
-//offset for sharp notes
+//offset for chromatic scale
 int offSetSharp = 27;
-
-//Enables or disables the pitch bend effect within each note section, currently broken will work on if I can get MIDI 2.0/MPE to work
-bool inNotePitch = false;
 
 //Trautonium mode will mess up if you try to also have this on, only have one or the other
 //Disables MIDI CC on the left and right pressure pads, and changes it into a funky pitch bend wheel
 bool padPitchBend = false;
-//How long the program will count before allowing pitch bend. NOT IN ms.
-const int countToPitch = 50;
 
-//Aftertouch ribbon
-const int lowerPrTr = 500;  //set the minimum amount of pressure needed for the pressure ribon to activate
-const int prBuffer = 600;   //the amount of pressure required to send any aftertouch
-const int upperPres = 900;  //the pressure amount where AT is at max
+//sends note velocity data depending on how hard the note was pressed down, if set to false a note velocity of 127 will always be send
+bool dynamicVelocity = false;
 
 //set the default MIDI channel to send
 int MIDIchannel = 1;
-//if true sends the different poly notes down different MIDI channels
-bool polyModeSeperateChannels = true;
 
 //Control change pads
 int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the left pad.
 int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the right pad.
-
-//set the max MIDI CC values for the pads at that pad reading
-const int upperPresPads = 900;
 
 //Poly Play. Designed around the diatonic scale
 int polyCount = 1;
@@ -106,11 +90,29 @@ bool debug = false;  //set to true to show more variables on the OLED
 bool noteListSelect = 0;
 //END OF CONFIG OPTIONS//
 
-//BOARD OPTIONS//These options are to match how you might have wired up your own controller
+//SENSOR CONFIG//
+//If making your own instrument, you may need to adjust the following variables
+
+//Position Ribbon
+//The ribbons deadzone size. Since when the ribbon isn't in use the value read drops to a low number, usually less than 10. This is one of the ways how the controller determines if the ribbon isn't in use. this value works for my ribbon: (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
+const int ribbonDeadZone = 32;
+
+//Aftertouch ribbon
+const int lowerPrTr = 500;  //set the minimum amount of pressure needed for the pressure ribon to activate
+const int prBuffer = 600;   //the amount of pressure required to send any aftertouch
+const int upperPres = 900;  //the pressure amount where AT is at max
+
+//CC Pads
+//set the max MIDI CC values for the pads at that pad reading
+const int upperPresPads = 900;
+//END OF SENSOR OPTIONS//
+
+//BOARD OPTIONS//
+//These options are to match how you might have wired up your own controller
 
 const int softpotPin = A0;         //position ribbon pin
-const int pressurePotPinLft = A1;  //pressure pad right pin
-const int pressurePotPinRht = A2;  //pressure pad right pin
+const int pressurePadPinLft = A1;  //pressure pad right pin
+const int pressurePadPinRht = A2;  //pressure pad right pin
 const int pressureRibbon = A3;     //aftertouch ribbon
 
 //Button Pins
@@ -129,16 +131,20 @@ const int oledSCLpin = 1;
 //END OF BOARD OPTIONS//
 
 
-//CODE BEGIN//Mostly Global variables required for performing music logic and the interface logic
+//CODE BEGIN//
+//Mostly Global variables required for performing music logic and the interface logic
 
-//MUSIC VARS//Variables that are expected to change under normal use//
+//MUSIC VARS//Variables that are expected to change under normal use
 int preSoftPotRead;   //preSoftPotRead is the reading used before it is processed to be sent as a MIDI message, I need both to be able to detect more accuratly where the position is
 int softPotReading;   //this is the presoftpotread deivided by the sectionsize variable to get a final position of where your finger is
 int ribbonIndicator;  //Makes the turning on/off of the DLED look neater when the ribbon is activated
 
 int pressureRibbonRead;  //The raw pressure data from the main ribbon
-int noteVelo;            //The formatted data for pressure ribbon to send to aftertouch
-int prevNoteVelo;        //Prevent sending the same pressure values
+int globalAT;            //The formatted data for pressure ribbon to send to aftertouch
+int prevglobalAT;        //Prevent sending the same pressure values
+
+int velocityWait;  //Value to wait for until MIDI is actually sent if using dynamic velocity
+int velocitySent;  //note changing when dynamic velocity is true will use the velocity determined on the first note on
 
 int pressurePotRhtRead;      //formatted right pressure pot read
 int prevPressurePotRhtRead;  //previous value of formatted data to prevent repeated sends
@@ -148,7 +154,9 @@ int pressurePotLftRead;      //formatted left pressure pot read
 int prevPressurePotLftRead;  //previous value of formatted data to prevent repeated sends
 int rawLeftPad;              //the raw left pad data for visualisation
 
-bool isActive = false;  //Helps to determine whether to note on, change note or note off. Also prevents the sending of infinate note offs
+bool isActive = false;  //Determines if there is an active MIDI note. Also prevents the sending of infinate note offs
+bool isValid = false;   //determines when the ribbon state is valid but doesnt care if MIDI messages are actually being sent
+
 
 int totalOffSet = 0;  //store the total offset to prevent recalculating it for every note
 
@@ -157,12 +165,9 @@ int btn1Sts = HIGH;  //state of button 1, LOW is pressed
 int btn2Sts = HIGH;  //state of button 2, LOW is pressed
 int btn3Sts = HIGH;  //state of button 3, LOW is pressed
 
-//Variables for in note pitch shift
-int pitchCount;                    //count to incrament until matched with countToPitch
-int inNotePos;                     //remember the inital position
-bool hasPitchBendStarted = false;  //to help determine the status of pitch bending
-int pitchBendValue;                //amount to pitch bend by
-int prevPitchBend;
+//Variables pitch bending
+int pitchBendValue;  //amount to pitch bend by
+int prevPitchBend;   //previous values to prevent duplicate messages
 
 //Variables used for trautonium mode
 int initialPos;
@@ -178,6 +183,7 @@ int prevNoteNums[4];
 int sleepLed = 255;        //fade the led when OLED is inactive
 bool sleepLedDir = false;  //allows the led to fade up and down without going to max brightness
 
+//MISC
 int superBreak = 0;  //Helps me get out of deep sub menus
 
 
@@ -188,7 +194,7 @@ const int noteNumberList[] = {
   36, 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71,
   72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108
 };
-//C2 Is repeated twice since the start of the ribbon is cut off by the "buffer"
+//C2 Is repeated twice since the start of the ribbon is cut off by the dead zone
 
 //Chromatic scale of notes
 const int noteNumListSharp[] = {
@@ -282,14 +288,12 @@ void setup() {
   digitalWrite(btn1, HIGH);
 
   digitalWrite(softpotPin, HIGH);
-  //digitalWrite(pressureRibbon, HIGH);
-  //digitalWrite(pressurePotPinRht, HIGH);
 
   displayCount = 200;  //prevents the liveInfo screen showing instantly after boot. Looks neater in my opinion
   display.setCursor(0, 0);
   display.print("Quantonium/R2M");
   display.setCursor(0, 12);
-  display.print("Version 2.4.1");  // will update this in every version hopefully
+  display.print("Version 2.4.2");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -315,24 +319,24 @@ void readPressure() {
   pressureRibbonRead = analogRead(pressureRibbon);  //get data for activation of controller
 
   //I've deliberatly added a 'buffer' so that the pad activates the controller without sending any AT commands unless the pad is held down further
-  noteVelo = map(constrain(pressureRibbonRead, prBuffer, upperPres), prBuffer, upperPres, 0, 127);  //change data for use as a MIDI CC
+  globalAT = map(constrain(pressureRibbonRead, prBuffer, upperPres), prBuffer, upperPres, 0, 127);  //change data for use as a MIDI CC
 
-  if (noteVelo != prevNoteVelo) {  //only send an update if a change is detected in the pressure
+  if (globalAT != prevglobalAT) {  //only send an update if a change is detected in the pressure
     if (polyPlayMultiCh == true) {
       for (int i = 1; i <= polyCount; i++) {
-        MIDI.sendAfterTouch(noteVelo, MIDIchannel + i - 1);
-        prevNoteVelo = noteVelo;
+        MIDI.sendAfterTouch(globalAT, MIDIchannel + i - 1);
+        prevglobalAT = globalAT;
       }
     } else {
-      MIDI.sendAfterTouch(noteVelo, MIDIchannel);
-      prevNoteVelo = noteVelo;
+      MIDI.sendAfterTouch(globalAT, MIDIchannel);
+      prevglobalAT = globalAT;
     }
   }
 
   //Red LED indication
   if (pressureRibbonRead > lowerPrTr) {  //if left pad is in use turn on red led
-    if (noteVelo > 0) {                  //if pad is being held down more than the 'buffer'
-      analogWrite(rLed, map(noteVelo, 0, 127, 205, 0));
+    if (globalAT > 0) {                  //if pad is being held down more than the 'buffer'
+      analogWrite(rLed, map(globalAT, 0, 127, 205, 0));
     } else {  //otherwise show a base value to show that the pad is in use but not being held down very firmly
       analogWrite(rLed, 205);
     }
@@ -345,8 +349,8 @@ void readPressure() {
 
 //gets the left and right pressure pad data and sends as a MIDI CC channel or as pitch bend
 void readModWheel() {
-  rawRightPad = analogRead(pressurePotPinRht);
-  rawLeftPad = analogRead(pressurePotPinLft);
+  rawRightPad = analogRead(pressurePadPinRht);
+  rawLeftPad = analogRead(pressurePadPinLft);
   if (padPitchBend == false) {
 
     pressurePotRhtRead = map(constrain(rawRightPad, 20, upperPresPads), 20, upperPresPads, 0, 127);  //read the right pressure pad and change from 0-1023 to 0-127
@@ -391,29 +395,10 @@ void readModWheel() {
   }
 }
 
-/*Disabled until MIDI 2.0/MPE
-//I plan on rewriting in note pitch bend when I figure out MIDI 2.0/MPE/UMP as that would solve ALL of the issues that I currently have with the global pitch bend
-//After rewritting the music logic this will no longer work but never really did in the first place
-void inNotePitchBend() {
-  if (inNotePitch == true) {  //only run if inNotePitch is set to true, skip if false
-    //Because a delay would prevent me from changing notes i need to count up to a variable to match another this allows me to wait and still use the controller whilst this is happening. Same concept behind the red led flash
-    if (noteNums[0] == prevNoteNums[0]) {
-      pitchCount++;
-    }                                  //no need to reset counter as this will be done as part of the main music loop in switching notes
-    if (pitchCount >= countToPitch) {  //if the same note has been played for a certain period of time, enable pitch bending. Prevents it from sounding to scuffed if your gliding on the ribbon
-      if (hasPitchBendStarted == false) {
-        inNotePos = preSoftPotRead;  //inNotePos determines where your finger is when pitch bending has started
-        hasPitchBendStarted = true;
-      }
-      pitchBendValue = inNotePos - preSoftPotRead;                              //Takes the difference from the starting point in each note and compares it to the current position
-      MIDI.sendPitchBend(0 - constrain(pitchBendValue * 100, -6500, 6500), 1);  //send the pitch bend value, tbf these values are kind of arbitrary so maybe thats why it sounds bad
-    }
-  }
-}
-*/
-//Reset all variables related to the pitch bend function
-void resetBend() {  //I had this coppied 4 times, put it in a function to make it neater
-  if (polyModeSeperateChannels == false) {
+
+//Reset pitch bend when about to play a note to stop weird sounds
+void resetBend() {
+  if (polyPlayMultiCh == true) {
     for (int i = 1; i <= polyCount; i++) {
       MIDI.sendPitchBend(0, MIDIchannel + i - 1);  //send a pitch-bend value based on the inital position set earlier
     }
@@ -458,14 +443,14 @@ void noteSelect() {
 }
 
 //sends the MIDI note on command, deals with POLY mode
-void noteOn() {
+void noteOn(int velocity) {
   if (polyPlayMultiCh == true) {  //if playing in multiple channel mode
     for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendNoteOn(noteNums[i - 1], 127, MIDIchannel + i - 1);
+      MIDI.sendNoteOn(noteNums[i - 1], velocity, MIDIchannel + i - 1);
     }
   } else {
     for (int i = 1; i <= polyCount; i++) {  //otherwise send MIDI down the same channel
-      MIDI.sendNoteOn(noteNums[i - 1], 127, MIDIchannel);
+      MIDI.sendNoteOn(noteNums[i - 1], velocity, MIDIchannel);
     }
   }
 }
@@ -607,7 +592,7 @@ void AR2Menu() {
   ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
   while (true) {
     display.clearDisplay();
-    threeLine("Exit AR2M Menu --->", "Ribbon Scale ----->", "Next Menu (1/4) -->");
+    threeLine("Exit AR2M Menu --->", "Ribbon Scale ----->", "Next Menu (1/5) -->");
     drawButtons();
 
     display.display();
@@ -671,7 +656,7 @@ void AR2Menu() {
         display.setCursor(108, 12);
         display.print(">");
         display.setCursor(0, 24);
-        display.print("Next Menu (2/4) -->");
+        display.print("Next Menu (2/5) -->");
         drawButtons();
 
         display.display();
@@ -852,7 +837,7 @@ void AR2Menu() {
             display.setCursor(0, 12);
             display.print("Poly MIDI Ch ----->");
             display.setCursor(0, 24);
-            display.print("Next Menu (3/4)--->");
+            display.print("Next Menu (3/5)--->");
             display.display();
             if (btn1Sts == LOW) {
               drawPressed(1);
@@ -928,13 +913,13 @@ void AR2Menu() {
                   display.print("Trautonium is off >");
                 }
                 display.setCursor(0, 12);
-                if (debug == true) {
-                  display.print("Debug is on ------>");
+                if (dynamicVelocity == true) {
+                  display.print("Dynamic Velocity ->");
                 } else {
-                  display.print("Debug is off ----->");
+                  display.print("Static Velocity -->");
                 }
                 display.setCursor(0, 24);
-                display.print("Next Menu (4/4) -->");
+                display.print("Next Menu (4/5) -->");
                 drawButtons();
                 updateButtons();
                 display.display();
@@ -951,16 +936,53 @@ void AR2Menu() {
                 if (btn2Sts == LOW) {
                   drawPressed(2);
                   updateButtons();
-                  if (debug == true) {
-                    debug = false;
+                  if (dynamicVelocity == true) {
+                    dynamicVelocity = false;
                   } else {
-                    debug = true;
+                    dynamicVelocity = true;
                   }
                 }
                 if (btn3Sts == LOW) {
                   drawPressed(3);
                   updateButtons();
-                  superBreak = 3;
+                  while (true) {
+                    if (superBreak > 0) {
+                      superBreak--;
+                      break;
+                    }
+                    display.clearDisplay();
+                    display.setCursor(0, 0);
+                    display.print("------------------>");
+                    display.setCursor(0, 12);
+                    if (debug == true) {
+                      display.print("Debug is on ------>");
+                    } else {
+                      display.print("Debug is off ----->");
+                    }
+                    display.setCursor(0, 24);
+                    display.print("Next Menu (5/5) -->");
+                    drawButtons();
+                    updateButtons();
+                    display.display();
+                    if (btn1Sts == LOW) {
+                      drawCross(1);
+                      updateButtons();
+                    }
+                    if (btn2Sts == LOW) {
+                      drawPressed(2);
+                      updateButtons();
+                      if (debug == true) {
+                        debug = false;
+                      } else {
+                        debug = true;
+                      }
+                    }
+                    if (btn3Sts == LOW) {
+                      drawPressed(3);
+                      updateButtons();
+                      superBreak = 4;
+                    }
+                  }
                 }
               }
             }
@@ -1445,7 +1467,7 @@ void showVars() {
   display.setCursor(64, 0);
   display.print(pressureRibbonRead);
   display.setCursor(85, 0);
-  display.print(noteVelo);
+  display.print(globalAT);
   display.setCursor(0, 12);
   //display.print(sectionNum);
   display.setCursor(64, 12);
@@ -1532,7 +1554,7 @@ void liveInfo() {
   display.drawLine(127, 24, 127, 32, 1);
   //Aftertouch Pressure Indicator on position ribbon
   display.drawLine(0, 24, constrain(map(pressureRibbonRead, 0, lowerPrTr, 0, 127), 0, 127), 24, 1);  //show build up to when MIDI send is allowed
-  display.drawLine(0, 31, noteVelo, 31, 1);                                                          //draw rectangle to show AT pressure
+  display.drawLine(0, 31, globalAT, 31, 1);                                                          //draw rectangle to show AT pressure
 
 
   //left side pad indicator and pitch bend handler
@@ -1627,9 +1649,10 @@ assuming your finger isn't on the ribbon
 
 I am pleased to say that I have not seen the bug since!
 */
+
+
+
 //Main logic on how notes are handled
-
-
 void music() {
   readPosition();  //get position
   readPressure();  //get pressure
@@ -1637,39 +1660,61 @@ void music() {
   noteSelect();    //get the note from the position data
 
   if ((pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone) && (isActive == false)) {  //check for a first time note (i.e. playing from nothing)
-
-    resetBend();
-    noteOn();                     //Send note on
-    storeNote();                  //store the note just sent
-    isActive = true;              //make the controller "active"
-    initialPos = preSoftPotRead;  //store the ionital position to give trautonium mode an offset to work from
+    isValid = true;
+    if (dynamicVelocity == true) {  //if dynamic velocity is true then
+      if (velocityWait < 3) {       //wait for the velocity to properly register this value along with the delay will need to be tweaked to feel right
+        velocityWait++;
+      } else {
+        resetBend();
+        velocitySent = globalAT;
+        noteOn(velocitySent);         //Send note on
+        storeNote();                  //store the note just sent
+        isActive = true;              //make the controller "active"
+        initialPos = preSoftPotRead;  //store the ionital position to give trautonium mode an offset to work from
+        velocityWait = 0;
+      }
+    } else {
+      resetBend();
+      noteOn(127);                  //Send note on
+      storeNote();                  //store the note just sent
+      isActive = true;              //make the controller "active"
+      initialPos = preSoftPotRead;  //store the ionital position to give trautonium mode an offset to work from
+      velocityWait = 0;
+      velocitySent = 127;
+    }
   }
 
   //Note change
   if ((pressureRibbonRead >= lowerPrTr) && (preSoftPotRead >= ribbonDeadZone) && (isActive == true)) {  //if there is a change of notes and the controller is still active
 
     if ((noteNums[0] != prevNoteNums[0]) && (trautonium == false)) {  //If trautonium mode is disabled, run normally
-      noteOn();                                                       //send new note
-      delay(10);                                                      //wait a bit for stability. Not for the controllers stability, but I've found that DAWs sometimes don't record the transition properly since they see the note off then new note with a tiny gap. Adding a delay gives time for the DAW to register the new note first
+      noteOn(velocitySent);                                           //send new note
+      delay(5);                                                       //wait a bit for stability. Not for the controllers stability, but I've found that DAWs sometimes don't record the transition properly since they see the note off then new note with a tiny gap. Adding a delay gives time for the DAW to register the new note first
       noteOff();                                                      //then turn off the previous note
       storeNote();                                                    //Store the new note so it can be turned off later
-    } else if (trautonium == true) {                                  //if trautonium is enabled do pitch-bend instead of switching notes
-      pitchBendValue = (preSoftPotRead - initialPos) * 8;             //update the pitch bend value
-      if (pitchBendValue != prevPitchBend) {                          //only send pitch bend if the new value is different from the old value, prevents duplicate messages
-        if (polyModeSeperateChannels == false) {
-          for (int i = 1; i <= polyCount; i++) {
+
+    } else if (trautonium == true) {                       //if trautonium is enabled do pitch-bend instead of switching notes
+      pitchBendValue = (preSoftPotRead - initialPos) * 8;  //update the pitch bend value
+      if (pitchBendValue != prevPitchBend) {               //only send pitch bend if the new value is different from the old value, prevents duplicate messages
+        if (polyPlayMultiCh == true) {
+          for (int i = 1; i <= polyCount; i++) {                      //send through multiple MIDI channels if needed
             MIDI.sendPitchBend(pitchBendValue, MIDIchannel + i - 1);  //send a pitch-bend value based on the inital position set earlier
           }
-        } else {
+        } else {                                            //otherwise only send it down 1 channel
           MIDI.sendPitchBend(pitchBendValue, MIDIchannel);  //send a pitch-bend value based on the inital position set earlier
         }
         prevPitchBend = pitchBendValue;  //Store the current pitch bend value to compare later
       }
-      delay(5);  //Delay for stability, dont want to flood the DAW with messages
+      delay(5);  //Delay for stability, dont want to flood the DAW with messages even with the code that prevents multiple messages of the same value
     }
   }
-  if (((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) && (isActive == true)) {  //check if the controller is no longer being used
 
+  if (((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) && (isValid == true)) {
+    velocityWait = 0;
+  }
+
+  if (((pressureRibbonRead < lowerPrTr) || (preSoftPotRead < ribbonDeadZone)) && (isActive == true)) {  //check if the controller is no longer being used
+    isValid = false;
     isActive = false;   //make the controller "inactive"
     noteOff();          //turn off the last recorded note
     noteOffCurrrent();  //and turn off the current note, prevents a tiny hole in the code from making the controller play on its own
