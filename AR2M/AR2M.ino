@@ -230,6 +230,8 @@ const char* keyList[] = { "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", 
 int currentNote = 0;
 
 int displayCount = 0;  //determines what is shown on the OLED
+int displaySpecial = 0;
+int displayPage = 0;  //Detrmines special OLED pages such as menus or key/oct change
 
 int blinkPixel = false;  //one pixel on the screen blinks to show when the screen is redrawn, used to be more visable on the UNO R3 but now blinks very quickly thanks to the pico
 
@@ -253,8 +255,8 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 
 
 void setup() {
-  USBDevice.setManufacturerDescriptor("Arduino Ribbon to MIDI");
-  USBDevice.setProductDescriptor("The MIDI Stick");
+  USBDevice.setManufacturerDescriptor("Quantized Trautonium");
+  USBDevice.setProductDescriptor("Quantonium");
 
   //Set LED pins to outputs
   pinMode(rLed, OUTPUT);
@@ -293,7 +295,7 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/R2M");
   display.setCursor(0, 12);
-  display.print("Version 2.4.2");  // will update this in every version hopefully
+  display.print("Version 2.4.3");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -312,7 +314,7 @@ void setup() {
   delay(500);
 }
 
-////START OF MUSIC FUNCTIONS//
+//START OF MUSIC FUNCTIONS//
 
 //get and sends pressure/aftertouch. Also doesn't send data if its the same value as before
 void readPressure() {
@@ -490,7 +492,7 @@ void storeNote() {
   }
 }
 
-//END OF MUSIC FUNCTIONS////
+//END OF MUSIC FUNCTIONS//
 
 //START OF OLED CODE//
 
@@ -506,6 +508,39 @@ void drawButtons() {
   display.fillRect(118, 0, 10, 10, 1);
   display.fillRect(118, 11, 10, 10, 1);
   display.fillRect(118, 22, 10, 10, 1);
+}
+
+//draw up, box and down shapes to show scrolling feature of main menu
+void drawSideBar() {
+  //Top/up button/arrow
+  //the button
+  display.fillRect(118, 0, 10, 10, 1);
+  //the vertical part of the arrow
+  display.drawLine(123, 1, 123, 8, 0);
+  display.drawLine(122, 1, 122, 8, 0);
+  //the pointers
+  display.drawLine(123, 1, 126, 4, 0);
+  display.drawLine(122, 1, 119, 4, 0);
+
+  //The middle/select button
+  //the button
+  display.fillRect(118, 11, 10, 10, 1);
+  //the horizontal part of the line
+  display.drawLine(119, 15, 126, 15, 0);
+  display.drawLine(119, 16, 126, 16, 0);
+  //the pointer
+  display.drawLine(119, 15, 122, 12, 0);
+  display.drawLine(119, 16, 122, 19, 0);
+
+  //the bottom/down button/arrow
+  //The button
+  display.fillRect(118, 22, 10, 10, 1);
+  //the verticle part of the arrow
+  display.drawLine(123, 23, 123, 30, 0);
+  display.drawLine(122, 23, 122, 30, 0);
+  //the pointers
+  display.drawLine(122, 30, 119, 27, 0);
+  display.drawLine(123, 30, 126, 27, 0);
 }
 
 //display one of 3 buttons being pressed, draws black boxes in the white boxes to simulate a press
@@ -584,425 +619,221 @@ void sleep() {
   analogWrite(bLed, sleepLed);
 }
 
-//The main menu once the middle button is pressed, want to move this to a seperate file because of how big this is but I may need to deal with local vars and I cba
-void AR2Menu() {
-  analogWrite(rLed, 205);
-  analogWrite(gLed, 255);
-  analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
-  ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
+//Select from a boolean choice, function needs to know the current value and the 2 option available to the user
+bool boolSelect(const char* property, bool currentOption, const char* option1, const char* option2) {
+  const char* selector = " <<";
+  String option1full;
+  String option2full;
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print(property);
+  drawButtons();
+
+  if (currentOption == 0) {
+    option1full = String(option1) + String(selector);
+    option2full = String(option2) + String(" ");
+  } else {
+    option1full = String(option1) + String(" ");
+    option2full = String(option2) + String(selector);
+  }
+
+  display.setCursor(0, 12);
+  display.print(option1full);
+  for (int i = 19 - option1full.length(); i != 0; i--) {
+    display.print("-");
+  }
+
+  display.setCursor(0, 24);
+  display.print(option2full);
+  for (int i = 19 - option2full.length(); i != 0; i--) {
+    display.print("-");
+  }
+
+  while (true) {
+    updateButtons();
+    drawButtons();
+    if (btn1Sts == LOW) {
+      drawCross(1);
+      updateButtons();
+    } else if (btn2Sts == LOW) {
+      drawPressed(2);
+      updateButtons();
+      return 0;
+    } else if (btn3Sts == LOW) {
+      drawPressed(3);
+      updateButtons();
+      return 1;
+    }
+    display.display();
+  }
+}
+
+//increase or decrease a value with a set max and min
+int numberSelect(const char* property, int currentValue, const int minimum, const int maximum) {
   while (true) {
     display.clearDisplay();
-    threeLine("Exit AR2M Menu --->", "Ribbon Scale ----->", "Next Menu (1/5) -->");
     drawButtons();
-
+    display.setCursor(0, 0);
+    display.print(property);
+    display.setCursor(5, 15);
+    display.setTextSize(2);
+    display.print(currentValue);
+    display.setTextSize(1);
+    display.setCursor(66, 0);
+    display.print("| Exit -");
+    display.setCursor(66, 12);
+    display.print("| Inc --");
+    display.setCursor(66, 24);
+    display.print("| Dec --");
     display.display();
+    updateButtons();
+    if (btn1Sts == LOW) {
+      drawPressed(1);
+      return currentValue;
+    } else if (btn2Sts == LOW) {
+      if (currentValue != maximum) {
+        drawPressed(2);
+        currentValue++;
+      } else {
+        drawCross(2);
+      }
+    } else if (btn3Sts == LOW) {
+      if (currentValue != minimum) {
+        drawPressed(3);
+        currentValue--;
+      } else {
+        drawCross(3);
+      }
+    }
+    display.display();
+  }
+}
+
+//Main menu, uses a lsit/scroll system instead of the old page inteface
+void newMenu() {
+  displayCount = 200;//if the display was sleeping make it shopw the menu once the menu is exited
+  int menuSelect = 0;
+  const int maxMenuNum = 7;  //the total number of menu items -1
+  const char* menuList[] = { "Exit Menu", "Poly Settings", "Ribbon Scale", "Pad Behaviour", "Trautonium Mode", "Velocity Mode", "Pad Control Ch.", "Debug Mode" };
+  //maybe add a coresponding list to show current settings on the menu list
+  while (true) {
+
+
+    display.clearDisplay();
+    drawSideBar();
+    //if were on the first menu item show the last menu item in the list
+    display.setCursor(1, 0);
+    display.setTextColor(1);
+    if (menuSelect == 0) {
+      display.print(menuList[maxMenuNum]);  //Will need to update this if menu items are added or removed
+    } else {
+      display.print(menuList[menuSelect - 1]);
+    }
+
+    display.fillRect(0, 11, 116, 10, 1);
+    display.setTextColor(0);
+    display.setCursor(1, 12);
+    display.print(menuList[menuSelect]);
+
+    display.setTextColor(1);
+    display.setCursor(1, 24);
+    if (menuSelect == maxMenuNum) {
+      display.print(menuList[0]);
+    } else {
+      display.print(menuList[menuSelect + 1]);
+    }
 
     updateButtons();
-    if (btn1Sts == LOW) {  //exits the menu and returns to the idle screens
+
+    if (btn1Sts == LOW) {
       drawPressed(1);
-      updateButtons();
-      displayCount = 200;  //prevents the liveInfo screen showing if button is pressed early on
-      analogWrite(rLed, 255);
-      analogWrite(bLed, 255);
-      break;
+      menuSelect--;
+      if (menuSelect < 0) {
+        menuSelect = maxMenuNum;
+      }
     }
-    if (btn2Sts == LOW) {  //allows selection of position ribbon mode
+    if (btn2Sts == LOW) {
       drawPressed(2);
-      while (true) {
-        display.clearDisplay();
-        if (noteListSelect == 0) {  //show star to represent the current active mode
-          threeLine("Ribbon mode select ", "Diatonic <- ------>", "Chromatic -------->");
-        } else {
-          threeLine("Ribbon mode select ", "Diatonic --------->", "Chromatic <- ----->");
-          polyCount = 1;  //since poly play isn't relly supported in Chromatic mode, it needs to be disabled. It would work but would sound very out of tune
-        }
-        drawButtons();
-        display.display();
-        updateButtons();
-        if (btn1Sts == LOW) {
-          drawCross(1);
-          updateButtons();
-        }
-        if (btn2Sts == LOW) {
+      //alota code
+      if (menuSelect == 0) {
+        break;
+      } else if (menuSelect == 1) {
+        if (noteListSelect == 1) {
+          display.fillRect(0, 11, 116, 10, 1);
+          display.setTextColor(0);
+          display.setCursor(1, 12);
+          display.print("N/A in chromatic!");
+          display.setTextColor(1);
           drawPressed(2);
-          noteListSelect = 0;
-          updateButtons();
-          break;
+          delay(1000);
+        } else {
+          polySettings();
         }
-        if (btn3Sts == LOW) {
-          drawPressed(3);
-          noteListSelect = 1;
+      } else if (menuSelect == 2) {
+        noteListSelect = boolSelect("Ribbon Scale", noteListSelect, "Diatonic", "Chromatic");
+      } else if (menuSelect == 3) {
+        padPitchBend = boolSelect("Pad Behaviour", padPitchBend, "Send CC", "Send Pitch Bend");
+      } else if (menuSelect == 4) {
+        trautonium = boolSelect("Trautonium Mode", trautonium, "Disabled", "Enabled");
+      } else if (menuSelect == 5) {
+        dynamicVelocity = boolSelect("MIDI Velocity", dynamicVelocity, "Disabled", "Enabled");
+      } else if (menuSelect == 6) {
+        while (true) {
           updateButtons();
-          break;
+          display.clearDisplay();
+          drawButtons();
+          display.setCursor(0, 0);
+          display.print("Exit --------------");
+          display.setCursor(0, 12);
+          display.print("Left CC (" + String(lftPotControlChanel) + ")");
+          for (int i = 19 - String("Left CC (" + String(lftPotControlChanel) + ")").length(); i != 0; i--) {
+            display.print("-");
+          }
+
+          display.setCursor(0, 24);
+          display.print("Right CC (" + String(rhtPotControlChanel) + ")");
+          for (int i = 19 - String("Right CC (" + String(rhtPotControlChanel) + ")").length(); i != 0; i--) {
+            display.print("-");
+          }
+
+          updateButtons();
+          if (btn1Sts == LOW) {
+            drawPressed(1);
+            break;
+          } else if (btn2Sts == LOW) {
+            drawPressed(2);
+            lftPotControlChanel = numberSelect("Left CC", lftPotControlChanel, 1, 127);
+          } else if (btn3Sts == LOW) {
+            drawPressed(3);
+            rhtPotControlChanel = numberSelect("Right CC", rhtPotControlChanel, 1, 127);
+          }
+          display.display();
         }
+      } else if (menuSelect == 7) {
+        debug = boolSelect("Debug Mode", debug, "Disabled", "Enabled");
+      } else {
+        menuSelect = 0;
       }
     }
-    if (btn3Sts == LOW) {  //progress to next menu layer
+    if (btn3Sts == LOW) {
       drawPressed(3);
-      while (true) {
-        if (superBreak > 0) {
-          superBreak--;
-          break;
-        }
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        if (MIDIchannel < 10) {
-          display.print("MIDI Channel (" + String(MIDIchannel) + ") ->");
-        } else {
-          display.print("MIDI Channel (" + String(MIDIchannel) + ") >");
-        }
-        display.setCursor(0, 12);
-        display.print("MIDI CCs (" + String(lftPotControlChanel) + "|" + String(rhtPotControlChanel) + ")");
-        display.setCursor(108, 12);
-        display.print(">");
-        display.setCursor(0, 24);
-        display.print("Next Menu (2/5) -->");
-        drawButtons();
-
-        display.display();
-        updateButtons();
-        if (btn1Sts == LOW) {
-          drawPressed(1);
-          while (true) {
-            display.clearDisplay();
-            drawButtons();
-            display.setCursor(0, 0);
-            display.print("MIDI Ch");
-            display.setCursor(4, 10);
-            display.setTextSize(3);
-            display.print(MIDIchannel);
-            display.setTextSize(1);
-            display.setCursor(48, 0);
-            display.print("| Exit --->");
-            display.setCursor(48, 12);
-            display.print("| Inc ---->");
-            display.setCursor(48, 24);
-            display.print("| Dec ---->");
-            display.display();
-            updateButtons();
-            if (btn1Sts == LOW) {
-              drawPressed(1);
-              break;
-            } else if (btn2Sts == LOW) {
-              if ((MIDIchannel == 16) ^ ((polyPlayMultiCh == true) && (MIDIchannel == 13))) {  //prevent from going over 16 XOR prevent from going over 13 if multy channel poly is true
-                drawCross(2);
-              } else {
-                drawPressed(2);
-                MIDIchannel++;
-              }
-            } else if (btn3Sts == LOW) {
-              if (MIDIchannel == 1) {  //I initially set this to 0 which meant you could send on MIDI CC 0, which doesn't exist XD
-                drawCross(3);
-              } else {
-                drawPressed(3);
-                MIDIchannel--;
-              }
-            }
-          }
-        }
-        //change the pressure pads CC number. IN the synth I like to use, Surge XT, you can really use any number. But for some special synths like Equator, certain functions only work on specific MIDI CCs
-        else if (btn2Sts == LOW) {
-          drawPressed(2);
-          while (true) {
-            updateButtons();
-            display.clearDisplay();
-            drawButtons();
-            display.setCursor(0, 0);
-            display.print("Exit ------------->");
-            display.setCursor(0, 12);
-            display.print("Left Pad CC (");
-            if (lftPotControlChanel < 10) {  //make it look neat :)
-              display.print(String(lftPotControlChanel) + ") -->");
-            } else if (lftPotControlChanel < 100) {
-              display.print(String(lftPotControlChanel) + ") ->");
-            } else {
-              display.print(String(lftPotControlChanel) + ") >");
-            }
-
-            display.setCursor(0, 24);
-            display.print("Right Pad CC (");
-            if (rhtPotControlChanel < 10) {  //make it look neat :)
-              display.print(String(rhtPotControlChanel) + ") ->");
-            } else if (rhtPotControlChanel < 100) {
-              display.print(String(rhtPotControlChanel) + ") >");
-            } else {
-              display.print(String(rhtPotControlChanel) + ")>");
-            }
-            display.display();
-            if (btn1Sts == LOW) {
-              drawPressed(1);
-              updateButtons();
-              break;
-            }
-            if (btn2Sts == LOW) {
-              drawPressed(2);
-              updateButtons();
-              while (true) {
-                display.clearDisplay();
-                drawButtons();
-
-                display.setCursor(0, 0);
-                display.print("Left CC");
-                display.setCursor(5, 15);
-                display.setTextSize(2);
-                display.print(lftPotControlChanel);
-                display.setTextSize(1);
-                display.setCursor(48, 0);
-                display.print("| Exit --->");
-                display.setCursor(48, 12);
-                display.print("| Inc ---->");
-                display.setCursor(48, 24);
-                display.print("| Dec ---->");
-                display.display();
-                updateButtons();
-                if (btn1Sts == LOW) {
-                  drawPressed(1);
-                  break;
-                } else if (btn2Sts == LOW) {
-                  if (lftPotControlChanel == 127) {
-                    drawCross(2);
-                  } else {
-                    drawPressed(2);
-                    lftPotControlChanel++;
-                  }
-                } else if (btn3Sts == LOW) {
-                  if (lftPotControlChanel == 1) {  //I initially set this to 0 which meant you could send on MIDI CC 0, which doesn't exist XD
-                    drawCross(3);
-                  } else {
-                    drawPressed(3);
-                    lftPotControlChanel--;
-                  }
-                }
-              }
-            }
-            if (btn3Sts == LOW) {
-              drawPressed(3);
-              updateButtons();
-              while (true) {
-                display.clearDisplay();
-                drawButtons();
-
-                display.setCursor(0, 0);
-                display.print("Right CC");
-                display.setCursor(5, 15);
-                display.setTextSize(2);
-                display.print(rhtPotControlChanel);
-                display.setTextSize(1);
-                display.setCursor(48, 0);
-                display.print("| Exit --->");
-                display.setCursor(48, 12);
-                display.print("| Inc ---->");
-                display.setCursor(48, 24);
-                display.print("| Dec ---->");
-                display.display();
-                updateButtons();
-                if (btn1Sts == LOW) {
-                  drawPressed(1);
-                  break;
-                } else if (btn2Sts == LOW) {
-                  if (rhtPotControlChanel == 127) {
-                    drawCross(2);
-                  } else {
-                    drawPressed(2);
-                    rhtPotControlChanel++;
-                  }
-                } else if (btn3Sts == LOW) {
-                  if (rhtPotControlChanel == 1) {
-                    drawCross(3);
-                  } else {
-                    drawPressed(3);
-                    rhtPotControlChanel--;
-                  }
-                }
-              }
-            }
-          }
-        } else if (btn3Sts == LOW) {
-          drawPressed(3);
-          updateButtons();
-          while (true) {
-            if (superBreak > 0) {
-              superBreak--;
-              break;
-            }
-            updateButtons();
-            display.clearDisplay();
-            drawButtons();
-            display.setCursor(0, 0);
-            if (padPitchBend == false) {
-              display.print("Pads send MIDI CC >");
-            } else {
-              display.print("Pads pitch bend -->");
-            }
-            display.setCursor(0, 12);
-            display.print("Poly MIDI Ch ----->");
-            display.setCursor(0, 24);
-            display.print("Next Menu (3/5)--->");
-            display.display();
-            if (btn1Sts == LOW) {
-              drawPressed(1);
-              if (padPitchBend == false) {
-                padPitchBend = true;
-              } else {
-                padPitchBend = false;
-              }
-            } else if (btn2Sts == LOW) {
-              drawPressed(2);
-              while (true) {
-                if (polyPlayMultiCh == true) {
-                  display.clearDisplay();
-                  threeLine("Poly Play Chan Mode", "Send diff chan<- ->", "Send same chan --->");
-                } else {
-                  display.clearDisplay();
-                  threeLine("Poly Play Chan Mode", "Send diff chan --->", "Send same chan<- ->");
-                }
-                drawButtons();
-                display.display();
-                updateButtons();
-
-                if (btn1Sts == LOW) {
-                  drawCross(1);
-                  updateButtons();
-                }
-                if (btn2Sts == LOW) {
-                  drawPressed(2);
-                  updateButtons();
-                  if (MIDIchannel > 16 - polyCount) {  //warn the user that the MIDI channel has changed in order to fit poly notes. I really dont see when this would be an issue since I've essentially created my own MIDI line so no other devices should share these channels, but a good failsafe
-                    MIDIchannel = 16 - polyCount;
-                    polyPlayMultiCh = true;
-                    display.clearDisplay();
-                    display.fillRect(0, 0, 128, 32, 1);
-                    display.setTextColor(0);
-                    display.setCursor(1, 1);
-                    display.print("Warning: MIDI is now");
-                    display.setCursor(1, 12);
-                    display.print("Ch" + String(16 - polyCount) + "to fit multiple");
-                    display.setCursor(1, 23);
-                    display.print("poly notes!");
-                    display.display();
-                    delay(5000);
-                    display.setTextColor(1);
-                    break;
-                  } else {
-                    drawPressed(2);
-                    polyPlayMultiCh = true;
-                    updateButtons();
-                    break;
-                  }
-                }
-                if (btn3Sts == LOW) {
-                  drawPressed(3);
-                  polyPlayMultiCh = false;
-                  updateButtons();
-                  break;
-                }
-              }
-            } else if (btn3Sts == LOW) {
-              drawPressed(3);
-              updateButtons();
-              while (true) {
-                if (superBreak > 0) {
-                  superBreak--;
-                  break;
-                }
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                if (trautonium == true) {
-                  display.print("Trautonium is on ->");
-                } else {
-                  display.print("Trautonium is off >");
-                }
-                display.setCursor(0, 12);
-                if (dynamicVelocity == true) {
-                  display.print("Dynamic Velocity ->");
-                } else {
-                  display.print("Static Velocity -->");
-                }
-                display.setCursor(0, 24);
-                display.print("Next Menu (4/5) -->");
-                drawButtons();
-                updateButtons();
-                display.display();
-                if (btn1Sts == LOW) {
-                  drawPressed(1);
-                  updateButtons();
-                  if (trautonium == true) {
-                    trautonium = false;
-                    MIDI.sendPitchBend(0, 1);  //reset pitch bend to prevent random issues in the synthesizers
-                  } else {
-                    trautonium = true;
-                  }
-                }
-                if (btn2Sts == LOW) {
-                  drawPressed(2);
-                  updateButtons();
-                  if (dynamicVelocity == true) {
-                    dynamicVelocity = false;
-                  } else {
-                    dynamicVelocity = true;
-                  }
-                }
-                if (btn3Sts == LOW) {
-                  drawPressed(3);
-                  updateButtons();
-                  while (true) {
-                    if (superBreak > 0) {
-                      superBreak--;
-                      break;
-                    }
-                    display.clearDisplay();
-                    display.setCursor(0, 0);
-                    display.print("------------------>");
-                    display.setCursor(0, 12);
-                    if (debug == true) {
-                      display.print("Debug is on ------>");
-                    } else {
-                      display.print("Debug is off ----->");
-                    }
-                    display.setCursor(0, 24);
-                    display.print("Next Menu (5/5) -->");
-                    drawButtons();
-                    updateButtons();
-                    display.display();
-                    if (btn1Sts == LOW) {
-                      drawCross(1);
-                      updateButtons();
-                    }
-                    if (btn2Sts == LOW) {
-                      drawPressed(2);
-                      updateButtons();
-                      if (debug == true) {
-                        debug = false;
-                      } else {
-                        debug = true;
-                      }
-                    }
-                    if (btn3Sts == LOW) {
-                      drawPressed(3);
-                      updateButtons();
-                      superBreak = 4;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+      menuSelect++;
+      if (menuSelect > maxMenuNum) {
+        menuSelect = 0;
       }
     }
+    display.display();
   }
 }
 
 //Change the poly mode settings also want to move this to a seperate file which might be less annoying to implament than AR2Menu
 void polySettings() {
   if (noteListSelect == 1) {  //if trying to access poly play mode in chromatic mode, don't
-    drawCross(1);
   } else {
     analogWrite(rLed, 205);
     analogWrite(gLed, 255);
     analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
-    drawPressed(1);
-    ribbonIndicator = 0;  //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
+    ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
     while (true) {
       if (superBreak > 0) {
         superBreak = 0;      //since this is the last break set superBreak to 0 incase of any negative or positive number
@@ -1313,19 +1144,25 @@ void changeKeyOct() {
 
     if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
       displayCount = 0;
+      displayPage = 0;
+      displaySpecial = 0;
     } else {
       displayCount = 200;
+      displayPage = 0;
+      displaySpecial = 0;
     }
   }
   if (btn2Sts == LOW) {  //change key
+    displaySpecial = 0;
     drawPressed(2);
     updateButtons();
-    displayCount = -2;  //-2 to indicate to oledScreen to show the changeKey screen
+    displayPage = 2;  //-2 to indicate to oledScreen to show the changeKey screen
   }
   if (btn3Sts == LOW) {  //change octaves
+    displaySpecial = 0;
     drawPressed(3);
     updateButtons();
-    displayCount = -3;  //-3 to indicate to oledScreen to show the changeOct screen
+    displayPage = 3;  //-3 to indicate to oledScreen to show the changeOct screen
   }
 }
 
@@ -1350,11 +1187,11 @@ void changeKey() {
   updateButtons();
   if (btn1Sts == LOW) {
     drawPressed(1);
-    displayCount = -1;  //change back to the change key/oct menu. Might change this ti fully return to the idle screen
+    displayPage = 0;  //back to the idle screen
   }
 
   else if (btn2Sts == LOW) {
-
+    displaySpecial = 0;
     if (offSetKey == 11) {  //wrap around if youve reached the key of B
       drawPressed(2);
       offSetKey = 0;
@@ -1365,6 +1202,7 @@ void changeKey() {
   }
 
   else if (btn3Sts == LOW) {
+    displaySpecial = 0;
     if (offSetKey == 0) {
       drawPressed(3);
       offSetKey = 11;
@@ -1401,11 +1239,11 @@ void changeOct() {
   display.display();
   if (btn1Sts == LOW) {
     drawPressed(1);
-    displayCount = -1;  //change back to the change key/oct menu. Might change this ti fully return to the idle screen
+    displayPage = 0;  //change back to the change key/oct menu. Might change this to fully return to the idle screen
   }
 
   else if (btn2Sts == LOW) {
-
+    displaySpecial = 0;
     if (octaveOffSet == 3) {  //if you allow this value to be higher the controller could wrap around to midi note number 0 assuming you are using default section size of 32
       drawCross(2);
     } else {
@@ -1415,6 +1253,7 @@ void changeOct() {
   }
 
   else if (btn3Sts == LOW) {
+    displaySpecial = 0;
     if (octaveOffSet == -3) {  //if you allow this value to be lower the controller could wrap around to midi note number 127
       drawCross(3);
     } else {
@@ -1433,24 +1272,24 @@ void idleDisplay() {
   //Show ribbon only status
   display.setCursor(0, 0);
   if (noteListSelect == 0) {
-    display.print("Poly Settings ---->");
+    display.print("Change Octave: ");
+    if (octaveOffSet >= 0) {
+      display.print("+");
+    }
+    display.print(octaveOffSet);
+    display.print(" -");
   } else {
     display.print("N/A in Chromatic");
   }
 
   display.setCursor(0, 12);
-  display.print("AR2M Menu -------->");
+    display.print("Main Menu ---------");
 
   display.setCursor(0, 24);
   if (noteListSelect == 0) {
-    display.print("Key/Oct is ");
+    display.print("Change Key: ");
     display.print(keyList[offSetKey]);
-    display.print("/");
-    if (octaveOffSet >= 0) {
-      display.print("+");
-    }
-    display.print(octaveOffSet);
-    display.print(" ->");
+    display.print(" ----");
   } else {
     display.print("N/A in Chromatic");
   }
@@ -1561,13 +1400,13 @@ void liveInfo() {
 
   if (padPitchBend == false) {  //if the controller is using the pads as CCs
     display.setCursor(0, 0);
-    display.print("CC ");
+    display.print("");
     display.print(lftPotControlChanel);  //show which cc the left side is sending out from
 
     display.fillRect(1, 12, map(rawLeftPad, 0, 1023, 0, 32), 6, 1);  //show actual pressure value
 
-    display.setCursor(92, 0);
-    display.print("CC ");
+    display.setCursor(96, 0);
+    display.print("");
     display.print(rhtPotControlChanel);  //show which cc the right side is sending out from
 
   } else {  //if the controller is using the pads to send pitch bend
@@ -1591,65 +1430,47 @@ void liveInfo() {
 
 //Handles which function is called to display on the OLED depending on different input/variable states
 void oledScreen() {
-  if (displayCount < 0) {  //check first that there isnt any negatives which indicate a special screen function
-    if (displayCount == -1) {
+  if (displayPage > 0) {  //check first that there are no specieal screens to show
+    if (displayPage == 1) {
       changeKeyOct();
-    } else if (displayCount == -2) {
+    } else if (displayPage == 2) {
       changeKey();
-    } else if (displayCount == -3) {
+    } else if (displayPage == 3) {
       changeOct();
+    }
+    displaySpecial++;
+    if (displaySpecial > 400) {
+      displayPage = 0;
+      displaySpecial = 0;
     }
   } else if ((preSoftPotRead > ribbonDeadZone) || (pressureRibbonRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {  // if any sensor is activated show the live info
     displayCount = 0;
   }
-  if (debug == false) {
-    if ((displayCount >= 0) && (displayCount < 200)) {  //show the live info display a bit after the controller has finished playing notes
-      liveInfo();
-      displayCount++;
-      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-      sleepLed = 255;          //reset sleep vars to make it neater
-      sleepLedDir = false;
-    } else if ((displayCount >= 0) && (displayCount < 1500)) {  //otherwise show the menu display
-      idleDisplay();
-      displayCount++;
-      analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-      sleepLed = 255;          //reset sleep vars to make it neater
-      sleepLedDir = false;
-    } else if ((displayCount >= 0) && (displayCount >= 1500)) {
-      display.clearDisplay();
-      display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
-      sleep();            //show blue led to indicate sleep like state
+  if (debug == false) {  //key change with debug is a bit broken but its not something that needs to be fixed since you shouldn't be playing the instrument in debug mode
+    if (displayPage == 0) {
+      if (displayCount < 200) {  //show the live info display a bit after the controller has finished playing notes
+        liveInfo();
+        displayCount++;
+        analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
+        sleepLed = 255;          //reset sleep vars to make it neater
+        sleepLedDir = false;
+      } else if (displayCount < 1500) {  //otherwise show the menu display
+        idleDisplay();
+        displayCount++;
+        analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
+        sleepLed = 255;          //reset sleep vars to make it neater
+        sleepLedDir = false;
+      } else if (displayCount >= 1500) {
+        display.clearDisplay();
+        display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
+        sleep();            //show blue led to indicate sleep like state
+      }
     }
-  } else {
+  } else {  //if debugging...
     showVars();
   }
 }
 //END OF OLED CODE//
-
-//MUSIC LOGIC CODE//
-/* Music logic rewrite 
-The previous version of the music() function ran on a loop based system
-Where if you were playing the controller, you entered a loop until you stopped
-
-This worked well but very occasionally resulted in the controller bugging out
-where it would not play the note you were on and then when you lift your finger 
-from the ribbon it would then play the previous note. I had no idea where this 
-was happening in the code. So I rewrote this part of the code.
-
-The music function now uses a sort of state based system, where each condition
-is checked every time. 
-
-It checks if you are playing a note from nothing
-It checks if you have changed a note whilst playing and
-It checks if you've stopped playing
-
-Because of the isActive variable, even if these checks are interupted 
-i.e. opening AR2M menu, as soon as you exit the menu, it will stop playing
-assuming your finger isn't on the ribbon
-
-I am pleased to say that I have not seen the bug since!
-*/
-
 
 
 //Main logic on how notes are handled
@@ -1726,29 +1547,37 @@ void loop() {  //The main loop itself doesn't play any music, it did controll th
   oledScreen();  //determines what is displayed to the screen when the instrument can be played, does not controll this during menus
 
 
-  if ((isActive == false) && (displayCount >= 0)) {  //only check for button updates when the controller is not active
+  if ((isActive == false) && (displayPage == 0)) {  //only check for button updates when the controller is not active and when there are no other special pages active
     updateButtons();
-    if (btn3Sts == LOW) {
+    if (btn1Sts == LOW) {
       idleDisplay();
-
       if (noteListSelect == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
-        drawPressed(3);
+        drawPressed(1);
         updateButtons();
-        displayCount = -1;  //set to -1 to prevent counter from changing so that the key change can be displayed and the controller can still be used
+        displayPage = 3;
       } else {
-        drawCross(3);
+        drawCross(1);
         updateButtons();
       }
     } else if (btn2Sts == LOW) {
       idleDisplay();
       drawPressed(2);
-      AR2Menu();
-    } else if (btn1Sts == LOW) {
-      idleDisplay();
-      polySettings();
+      analogWrite(rLed, 205);
+      analogWrite(bLed, 205);
+      newMenu();
       analogWrite(rLed, 255);
       analogWrite(gLed, 255);
-      analogWrite(bLed, 255);  //turn off purple leds to show active controller
+      analogWrite(bLed, 255);
+    } else if (btn3Sts == LOW) {
+      idleDisplay();
+      if (noteListSelect == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
+        drawPressed(3);
+        updateButtons();
+        displayPage = 2;
+      } else {
+        drawCross(3);
+        updateButtons();
+      }
     }
   }
 }
