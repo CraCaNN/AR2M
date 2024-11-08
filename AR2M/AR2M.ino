@@ -304,7 +304,7 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.5.0");  // will update this in every version hopefully
+  display.print("Version 2.4.5");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
