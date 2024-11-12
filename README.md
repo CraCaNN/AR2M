@@ -27,7 +27,7 @@ An FSR (Force Sensitive Resistor) ribbon is positioned underneath the softpot an
 The total cost of parts is ~£100 if you build it from scratch, although I plan on making a sellable version at some point\
 I may sell these as kits or as completed units or both
 
-**Ghost Notes** are a result of not playing the instrument correctly, where the instrument thinks you are playing a note further down the ribbon than you actually are
+**Ghost Notes** are a result of not playing the instrument correctly, where the instrument thinks you are playing a note further down the ribbon than you actually are.\
 To play without creating ghost notes you need to put your finger right on the middle of the position ribbon as lying it across a section will result in ghost notes
 
 This project is designed around [Pimoronis Tiny 2040](https://shop.pimoroni.com/products/tiny-2040?variant=39560012300371) since they're well priced, very compact and have USB-C unlike the official Picos
