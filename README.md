@@ -9,13 +9,13 @@ AR2M (Arduino Ribbon to MIDI) is the codebase name
 This project is made up of the following:
 * 1x wood plank, or something else to put the Arduino, ribbon and pressure pads on.
 * 1x 500mm soft pot
-* 1x500 or 600mm FSR ribbon
+* 1x 600mm FSR ribbon
 * 2x Force Sensitive Resistors (Rated for 0-10kg)
 * 1x Tiny 2040 (the Tiny 2350 should work and I can confirm that the program compiles when using the `Raspberry Pi Pico 2` board, will confirm if it actually works when I've built another instrument using the Tiny 2350)
 
 The softpot controls which note you play, by default this is Quantized to the key of C
 - The key can be changed at any point
-- There is also a pitch bend only mode where only pitch bend after the first note
+- There is also a pitch bend only mode where only pitch bend after the first note (Requies a patch that works around this feature in your choice of synth)
 
 An FSR (Force Sensitive Resistor) ribbon is positioned underneath the softpot and sends aftertouch depending on how hard you press down on the ribbon, it also helps to prevent **ghost notes**\
 \
