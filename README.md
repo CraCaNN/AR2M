@@ -1,6 +1,6 @@
 # Quantonium/AR2M
 ![The full controller](https://github.com/CraCaNN/AR2M/blob/main/media/Quantonium.jpg)
-The Quantonium (Quantized-Trautonium) is a cheaper DIY alternative to the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
+The Quantonium (Quantized-Trautonium) is a MIDI based ribbon controller, inspired by the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
 It's also a partial alternative to Doepfers [R2M](https://doepfer.de/R2M.htm) (Ribbon to MIDI system which is no longer in available), with the main difference being that this project is MIDI only and no CV\
 \
 Quantonium is the full instrument name\
@@ -13,7 +13,11 @@ This project is made up of the following:
 * 2x Force Sensitive Resistors (Rated for 0-10kg)
 * 1x Tiny 2040 (the Tiny 2350 should work and I can confirm that the program compiles when using the `Raspberry Pi Pico 2` board, will confirm if it actually works when I've built another instrument using the Tiny 2350)
 
-The softpot controls which note you play, by default this is Quantized to the key of C
+The codebase is made up of 2 main sections, the music logic code, and the user interface\
+The music logic handles what note to play, when to change note, and anything that sends MIDI. This makes up the core functionality of the controller.\
+The user interface code allows the user to interact with the instrument, setting the key, and changing ribbon behaviour. Technically this aspect of the code & hardware isn't required to operate the controller but makes it much easier to interface with and see what is happening with the instrument.
+
+The softpot (main ribbon/gets position) controls which note you play, by default this is Quantized to the key of C
 - The key can be changed at any point
 - There is also a pitch bend only mode where only pitch bend after the first note (Requies a patch that works around this feature in your choice of synth)
 
