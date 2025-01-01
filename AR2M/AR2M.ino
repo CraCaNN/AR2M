@@ -65,20 +65,6 @@ bool dynamicVelocity = false;
 int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the left pad.
 int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the right pad.
 
-//Poly Play. Designed around the diatonic scale
-int polyCount = 1;
-//Should be between 1-4. Absolute max is 16! Number of poly channels sent. Could be higher if you wanted to make a chord longer than 4 notes.
-//Many things will probably break if this becomes more than 4
-
-//DYNAMIC VARS//Variables that can change but not while playing the controller//
-int polyChord[4] = { 0, 12, 24 };
-//Some chords support either 3 or 4, this prevents the user from increasing the poly send count above the supported chord count
-int maxPolyCount = 3;
-
-//Set poly plays channel output mode
-bool polyPlayMultiCh = true;
-//if true each chord is sent on its own MIDI channel. Meant for allowing multiple instances of mono synthesizers so gliding can work correctly
-
 
 //Debuging
 bool debug = false;  //set to true to show more variables on the OLED
@@ -177,11 +163,11 @@ int bendAmount;
 int inNoteStartPos;
 int PBwait = 0;
 
-//noteNums is the note(s) that is currently playing
-int noteNums[4];
+//noteNum is the note(s) that is currently playing
+int noteNum;
 
-//prevNoteNums is also the current note(s) playing but is not updated when a new note is played. This helps the controller to determine which note to turn off
-int prevNoteNums[4];
+//prevnoteNum is also the current note(s) playing but is not updated when a new note is played. This helps the controller to determine which note to turn off
+int prevnoteNum;
 
 //LED
 int sleepLed = 255;        //fade the led when OLED is inactive
@@ -304,7 +290,7 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.4.5");  // will update this in every version hopefully
+  display.print("Version 2.4.6");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -332,16 +318,9 @@ void readPressure() {
   //I've deliberatly added a 'buffer' so that the pad activates the controller without sending any AT commands unless the pad is held down further
   globalAT = map(constrain(rawPresRead, prBuffer, upperPres), prBuffer, upperPres, 0, 127);  //change data for use as a MIDI CC
 
-  if (globalAT != prevglobalAT) {   //only send an update if a change is detected in the pressure
-    if (polyPlayMultiCh == true) {  //send down multiple MIDI channels if that option is enabled
-      for (int i = 1; i <= polyCount; i++) {
-        MIDI.sendAfterTouch(globalAT, MIDIchannel + i - 1);
-        prevglobalAT = globalAT;  //store to compare with later to prevent duplicate messages
-      }
-    } else {
-      MIDI.sendAfterTouch(globalAT, MIDIchannel);  //otherwise only one channel is used
-      prevglobalAT = globalAT;
-    }
+  if (globalAT != prevglobalAT) {                //only send an update if a change is detected in the pressure
+    MIDI.sendAfterTouch(globalAT, MIDIchannel);  //otherwise only one channel is used
+    prevglobalAT = globalAT;
   }
 
   //Red LED indication, will light up if the pressure has surpassed the buffer, will then increase in intensity when AT is being sent
@@ -367,39 +346,21 @@ void readModWheel() {
     //gets the data, add a 'buffer' with constrain, map to fit with a MIDI CC channel
     pressurePotLftRead = map(constrain(rawLeftPad, 20, upperPresPads), 20, upperPresPads, 0, 127);  //read the left pressure pad and change from 0-upperPressure to 0-127
 
-    if (pressurePotRhtRead != prevPressurePotRhtRead) {  //only send if the current value is different to the previous value
-      for (int i = 1; i <= polyCount; i++) {
-        if (polyPlayMultiCh == true) {
-          MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel + i - 1);  //send modulation command
-        } else {
-          MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel);  //send modulation command
-        }
-      }
-      prevPressurePotRhtRead = pressurePotRhtRead;  //make the prev reading the same as the current one so to fail the check until the readings change
+    if (pressurePotRhtRead != prevPressurePotRhtRead) {                              //only send if the current value is different to the previous value
+      MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel);  //send modulation command
+      prevPressurePotRhtRead = pressurePotRhtRead;                                   //make the prev reading the same as the current one so to fail the check until the readings change
     }
 
-    if (pressurePotLftRead != prevPressurePotLftRead) {  //only send if the current value is different to the previous value
-      for (int i = 1; i <= polyCount; i++) {
-        if (polyPlayMultiCh == true) {
-          MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, MIDIchannel + i - 1);  //send modulation command
-        } else {
-          MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, MIDIchannel);  //send modulation command
-        }
-      }
+    if (pressurePotLftRead != prevPressurePotLftRead) {                              //only send if the current value is different to the previous value
+      MIDI.sendControlChange(lftPotControlChanel, pressurePotLftRead, MIDIchannel);  //send modulation command
       prevPressurePotLftRead = pressurePotLftRead;
     }
   }
 
   else {                                                                                      //use pads as a pitch bend
-    pitchBendValue = map(rawRightPad, 0, 1024, 0, 4096) - map(rawLeftPad, 0, 1024, 0, 4096);  //gets the actual pitch bend value to send
+    pitchBendValue = map(rawRightPad, 0, 1024, 0, 8192) - map(rawLeftPad, 0, 1024, 0, 8192);  //gets the actual pitch bend value to send
     if (pitchBendValue != prevPitchBend) {                                                    //only send if the current value is different to the previous value
-      if (polyPlayMultiCh == true) {                                                          //send though multiple channels if that option is enabled
-        for (int i = 1; i <= polyCount; i++) {
-          MIDI.sendPitchBend(pitchBendValue, MIDIchannel + i - 1);
-        }
-      } else {  //otherwise just send though a single channel
-        MIDI.sendPitchBend(pitchBendValue, MIDIchannel);
-      }
+      MIDI.sendPitchBend(pitchBendValue, MIDIchannel);
       prevPitchBend = pitchBendValue;  //store current value to compare later
     }
   }
@@ -427,73 +388,40 @@ void readPosition() {
   }
 }
 
-//gets the ribbon position and the note number. Deals with poly modes as well
+//Could easily modify this to add custom scales instead of the major scale
+//gets the ribbon position and the note number.
 void noteSelect() {
-  softPotReading = rawPosRead / sectionSize;  //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
-  if (noteListSelect == 0) {                  //if playing in diatonic
-    for (int i = 1; i <= polyCount; i++) {    //only loop for the number of poly notes that there are
-
-      noteNums[i - 1] = constrain(noteNumberList[softPotReading] + totalOffSet + polyChord[i - 1], 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
-    }
-  } else {  //if playing in chromatic
-    for (int i = 1; i <= polyCount; i++) {
-      noteNums[i - 1] = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
-    }
+  softPotReading = rawPosRead / sectionSize;                                      //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
+  if (noteListSelect == 0) {                                                      //if playing in diatonic
+    noteNum = constrain(noteNumberList[softPotReading] + totalOffSet, 0, 127);    //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
+  } else {                                                                        //if playing in chromatic
+    noteNum = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
   }
 }
 
 
 
-//sends the MIDI note on command, expects a velocity value, deals with POLY mode
+//sends the MIDI note on command, expects a velocity value
 void noteOn(int velocity) {
-  if (polyPlayMultiCh == true) {  //if playing in multiple channel mode
-    for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendNoteOn(noteNums[i - 1], velocity, MIDIchannel + i - 1);
-    }
-  } else {
-    for (int i = 1; i <= polyCount; i++) {  //otherwise send MIDI down the same channel
-      MIDI.sendNoteOn(noteNums[i - 1], velocity, MIDIchannel);
-    }
-  }
+  MIDI.sendNoteOn(noteNum, velocity, MIDIchannel);
 }
 
-//sends the MIDI note off command, deals with POLY mode
+//sends the MIDI note off command
 void noteOff() {
-  if (polyPlayMultiCh == true) {  //if playing in multiple channel mode
-    for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendNoteOff(prevNoteNums[i - 1], 127, MIDIchannel + i - 1);
-    }
-  } else {  //otherwise send MIDI down the same channel
-    for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendNoteOff(prevNoteNums[i - 1], 127, MIDIchannel);
-    }
-  }
+  MIDI.sendNoteOff(prevnoteNum, 127, MIDIchannel);
 }
 
 //Realistically the function bellow isn't needed but there could be a chance where the note is changed then the controller sends that note off on the wrong note. but to be on the safe side, this function exists
 //sends the MIDI note off command for sending the note off of a current note, used to deactivate the proper notes when fully releasing the controller
 void noteOffCurrrent() {
-
-  if (polyPlayMultiCh == true) {
-    for (int i = 1; i <= polyCount; i++) {  //if playing in multiple channel mode
-      MIDI.sendNoteOff(noteNums[i - 1], 127, MIDIchannel + i - 1);
-    }
-  } else {  //otherwise send MIDI down the same channel
-    for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendNoteOff(noteNums[i - 1], 127, MIDIchannel);
-    }
-  }
+  MIDI.sendNoteOff(noteNum, 127, MIDIchannel);
 }
-
 
 //stores the current note so when a new note is played the controller knows which note to turn off
 void storeNote() {
-  for (int i = 1; i <= polyCount; i++) {  //only run for the number of poly notes
-    prevNoteNums[i - 1] = noteNums[i - 1];
-  }
+  prevnoteNum = noteNum;
+  //used to be more complicated :)
 }
-
-
 
 
 void activePB() {
@@ -512,29 +440,17 @@ void activePB() {
 
 //Reset pitch bend when about to play a note to stop weird sounds
 void resetBend() {
-  if (polyPlayMultiCh == true) {
-    for (int i = 1; i <= polyCount; i++) {
-      MIDI.sendPitchBend(0, MIDIchannel + i - 1);
-    }
-  } else {
-    MIDI.sendPitchBend(0, MIDIchannel);
-  }
+  MIDI.sendPitchBend(0, MIDIchannel);
   inNoteStartPos = 0;
   pitchBendValue = 0;
   PBwait = 0;
 }
 
 void trautonium() {
-  pitchBendValue = (rawPosRead - initialPos) * 8;  //update the pitch bend value
-  if (pitchBendValue != prevPitchBend) {           //only send pitch bend if the new value is different from the old value, prevents duplicate messages
-    if (polyPlayMultiCh == true) {
-      for (int i = 1; i <= polyCount; i++) {                      //send through multiple MIDI channels if needed
-        MIDI.sendPitchBend(pitchBendValue, MIDIchannel + i - 1);  //send a pitch-bend value based on the inital position set earlier
-      }
-    } else {                                             //otherwise only send it down 1 channel
-      MIDI.sendPitchBend(-pitchBendValue, MIDIchannel);  //send a pitch-bend value based on the inital position set earlier
-    }
-    prevPitchBend = pitchBendValue;  //Store the current pitch bend value to compare later
+  pitchBendValue = (rawPosRead - initialPos) * 8;      //update the pitch bend value
+  if (pitchBendValue != prevPitchBend) {               //otherwise only send it down 1 channel
+    MIDI.sendPitchBend(-pitchBendValue, MIDIchannel);  //send a pitch-bend value based on the inital position set earlier
+    prevPitchBend = pitchBendValue;                    //Store the current pitch bend value to compare later
   }
   delay(5);  //Delay for stability, dont want to flood the DAW with messages even with the code that prevents multiple messages of the same value
 }
@@ -643,7 +559,7 @@ void drawCross(int buttonPressed) {
   }
 }
 
-//Simplify some of the code, mostly in polySettings
+//Simplify some programming aspects of the user interface
 void threeLine(const char* line1, const char* line2, const char* line3) {
   display.setCursor(0, 0);
   display.print(line1);
@@ -817,13 +733,39 @@ int numberSelect(const char* property, int currentValue, const int minimum, cons
 //Main menu, uses a list/scroll system instead of the old page inteface
 void newMenu() {
   displayCount = 200;        //if the display was sleeping make it show the menu once the menu is exited
-  int menuSelect = 0;        //Will need to update this if menu items are added or removed
-  const int maxMenuNum = 7;  //the total number of menu items -1
-  const char* menuList[] = { "Exit Menu", "Poly Settings", "Ribbon Scale", "Pad Behaviour", "Trautonium Mode", "In Note PB", "Velocity Mode", "Pad Control Ch." };
-  //maybe add a coresponding list to show current settings on the menu list
+  int menuSelect = 0;        //The currently selected item
+  const int maxMenuNum = 6;  //the total number of menu items -1
+  const char* menuList[] = { "Exit Menu", "Ribbon Scale", "Pad Behaviour", "Trautonium Mode", "In Note PB", "Velocity Mode", "Pad Control Ch." };
+  char* menuListItemSts[] = { "" };  //TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!//maybe add a coresponding list to show current settings on the menu list
+
   while (true) {
     display.clearDisplay();
     drawSideBar();
+  /*
+    //number indicator
+    display.setTextColor(0);
+    display.setCursor(121, 12);
+    display.print(menuSelect + 1);
+
+    display.setCursor(121, 1);
+    if (menuSelect == 0) {
+      display.print(maxMenuNum+1);
+    } else {
+      display.print(menuSelect);
+    }
+
+    display.setCursor(121, 23);
+    if (menuSelect == maxMenuNum) {
+      display.print(1);
+    } else {
+      display.print(menuSelect + 2);
+    }
+  */
+    //Scroll bar
+    display.drawRect(116,(32/maxMenuNum)*(menuSelect*0.9),0,32/maxMenuNum+1,1);
+
+
+
     //the top menu option
     display.setCursor(1, 0);  //set cursor 1px out to show the full box
     display.setTextColor(1);  //the white box background for the highlighted menu item
@@ -836,7 +778,7 @@ void newMenu() {
     }
 
     //the middle menu option/the currently selected menu item
-    display.fillRect(0, 11, 116, 10, 1);  //white box as background
+    display.fillRect(0, 11, 114, 10, 1);  //white box as background
     display.setTextColor(0);              //with black text
     display.setCursor(1, 12);
     display.print(menuList[menuSelect]);  //show the current menu item
@@ -865,14 +807,8 @@ void newMenu() {
       if (menuSelect == 0) {
         break;
       } else if (menuSelect == 1) {
-        if (noteListSelect == 1) {
-          alert("Not available in ", "chromatic scale!", "");
-        } else {
-          polySettings();
-        }
-      } else if (menuSelect == 2) {
         noteListSelect = boolSelect("Ribbon Scale", noteListSelect, "Diatonic", "Chromatic");
-      } else if (menuSelect == 3) {
+      } else if (menuSelect == 2) {
         padPitchBend = boolSelect("Pad Behaviour", padPitchBend, "Send CC", "Send Pitch Bend");
         if ((padPitchBend == true) && (trautoniumMode == true)) {
           alert("Disable TRAUTONIUM", "mode to use", "PAD PITCH BEND!");
@@ -882,7 +818,7 @@ void newMenu() {
           padPitchBend = false;
         }
 
-      } else if (menuSelect == 4) {
+      } else if (menuSelect == 3) {
         trautoniumMode = boolSelect("Trautonium Mode", trautoniumMode, "Disabled", "Enabled");
         if ((trautoniumMode == true) && (padPitchBend == true)) {
           alert("Change pad behaviour", "to MIDI CC to use", "TRAUTONIUM mode!");
@@ -892,7 +828,7 @@ void newMenu() {
           trautoniumMode = false;
         }
 
-      } else if (menuSelect == 5) {
+      } else if (menuSelect == 4) {
         allowInNotePB = boolSelect("In Note PB", allowInNotePB, "Disabled", "Enabled");
         if ((allowInNotePB == true) && (padPitchBend == true)) {
           alert("Change pad behaviour", "to MIDI CC to use", "IN NOTE PB!");
@@ -902,9 +838,9 @@ void newMenu() {
           allowInNotePB = false;
         }
 
-      } else if (menuSelect == 6) {
+      } else if (menuSelect == 5) {
         dynamicVelocity = boolSelect("Dynamic Velocity", dynamicVelocity, "Disabled", "Enabled");
-      } else if (menuSelect == 7) {
+      } else if (menuSelect == 6) {
         while (true) {  //this option needs an aditional sub-menu
           updateButtons();
           display.clearDisplay();
@@ -950,300 +886,6 @@ void newMenu() {
     display.display();
   }
 }
-
-//Change the poly mode settings
-void polySettings() {
-  if (noteListSelect == 1) {  //if trying to access poly play mode in chromatic mode, don't
-  } else {
-    analogWrite(rLed, 205);
-    analogWrite(gLed, 255);
-    analogWrite(bLed, 205);  //show purple to indicate that the controller wont output anything
-    ribbonIndicator = 0;     //fixes an issue where if the ribbon is being held down then the menu is requested it would then light up once the menu is exited
-    while (true) {
-      if (superBreak > 0) {
-        superBreak = 0;      //since this is the last break set superBreak to 0 incase of any negative or positive number
-        displayCount = 200;  //prevents the liveInfo screen showing if button is pressed early on
-        break;
-      }
-      display.clearDisplay();
-      display.setCursor(0, 0);
-      display.print("Exit ------------->");
-      display.setCursor(0, 12);
-      display.print("Poly Count (" + String(polyCount) + ") --->");
-      display.setCursor(0, 24);
-      display.print("Poly Type -------->");
-      drawButtons();
-
-      display.display();
-
-      updateButtons();
-      if (btn2Sts == LOW) {
-        drawPressed(2);
-        while (true) {
-          if (superBreak > 0) {
-            superBreak--;
-            break;
-          }
-          display.clearDisplay();
-          display.setCursor(0, 0);
-          display.print("Exit ------------->");
-          display.setCursor(0, 12);
-          display.print("Current      Inc ->");
-          display.setCursor(0, 24);
-          display.print(("Mode: ") + String(polyCount) + ("      Dec ->"));
-          drawButtons();
-          display.display();
-          updateButtons();
-          if (btn1Sts == LOW) {
-            drawPressed(1);
-            updateButtons();
-            break;
-          } else if (btn3Sts == LOW) {
-            if (polyCount <= 1) {
-              drawCross(3);
-            } else {
-              drawPressed(3);
-              polyCount--;
-            }
-          } else if (btn2Sts == LOW) {
-            if (polyCount >= maxPolyCount) {
-              drawCross(2);
-            } else {
-              drawPressed(2);
-              polyCount++;
-            }
-          }
-        }
-      }
-      //change what poly modes are played
-      else if (btn3Sts == LOW) {
-        drawPressed(3);
-        updateButtons();
-        while (true) {
-          if (superBreak > 0) {
-            superBreak--;
-            break;
-          }
-          display.clearDisplay();
-          drawButtons();
-          display.setCursor(0, 0);
-          display.print("Exit ------------->");
-          display.setCursor(0, 12);
-          display.print("Major Chords ----->");
-          display.setCursor(0, 24);
-          display.print("Minor Chords ----->");
-          updateButtons();
-          display.display();
-          if (btn2Sts == LOW) {
-            drawPressed(2);
-            updateButtons();
-            while (true) {
-              if (superBreak > 0) {
-                superBreak--;
-                break;
-              }
-              display.clearDisplay();
-              drawButtons();
-              threeLine("3 Oct      1,8,15 >", "Major 6   1,3,5,6 >", "Next (1/3)-------->");
-              updateButtons();
-              display.display();
-              if (btn1Sts == LOW) {
-                drawPressed(1);
-                updateButtons();
-                polyChord[1] = 12;
-                polyChord[2] = 24;
-                maxPolyCount = 3;
-                if (polyCount == 4) {
-                  polyCount = 3;
-                }
-                superBreak = 3;
-              } else if (btn2Sts == LOW) {
-                drawPressed(2);
-                updateButtons();
-                polyChord[1] = 4;
-                polyChord[2] = 7;
-                polyChord[3] = 9;
-                maxPolyCount = 4;
-                superBreak = 3;
-              } else if (btn3Sts == LOW) {
-                drawPressed(3);
-                while (true) {
-                  if (superBreak > 0) {
-                    superBreak--;
-                    break;
-                  }
-                  display.clearDisplay();
-                  drawButtons();
-                  threeLine("Dom 7    1,3,5,b7 >", "Major 7   1,3,5,7 >", "Next (2/3)-------->");
-                  updateButtons();
-                  display.display();
-                  if (btn1Sts == LOW) {
-                    drawPressed(1);
-                    updateButtons();
-                    polyChord[1] = 4;
-                    polyChord[2] = 7;
-                    polyChord[3] = 10;
-                    maxPolyCount = 4;
-                    superBreak = 4;
-                  } else if (btn2Sts == LOW) {
-                    drawPressed(2);
-                    updateButtons();
-                    polyChord[1] = 4;
-                    polyChord[2] = 7;
-                    polyChord[3] = 11;
-                    maxPolyCount = 4;
-                    superBreak = 4;
-                  } else if (btn3Sts == LOW) {
-                    drawPressed(3);
-                    updateButtons();
-                    while (true) {
-                      if (superBreak > 0) {
-                        superBreak--;
-                        break;
-                      }
-                      display.clearDisplay();
-                      drawButtons();
-                      threeLine("Aug        1,3,#5 >", "Exit ------------->", "Next (3/3) ------->");
-                      updateButtons();
-                      display.display();
-                      if (btn1Sts == LOW) {
-                        drawPressed(1);
-                        updateButtons();
-                        polyChord[1] = 4;
-                        polyChord[2] = 8;
-                        polyChord[3] = 0;
-                        if (polyCount == 4) {
-                          polyCount = 3;
-                        }
-                        maxPolyCount = 3;
-                        superBreak = 5;
-                      } else if (btn2Sts == LOW) {
-                        drawPressed(2);
-                        updateButtons();
-                        superBreak = 5;
-                      } else if (btn3Sts == LOW) {
-                        drawPressed(3);
-                        updateButtons();
-                        superBreak = 2;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } else if (btn3Sts == LOW) {
-            drawPressed(3);
-            updateButtons();
-            while (true) {
-              if (superBreak > 0) {
-                superBreak--;
-                break;
-              }
-              display.clearDisplay();
-              drawButtons();
-              threeLine("Minor      1,b3,5 >", "Minor 6  1,b3,5,6 >", "Next (1/3)-------->");
-              updateButtons();
-              display.display();
-              if (btn1Sts == LOW) {
-                drawPressed(1);
-                updateButtons();
-                polyChord[1] = 3;
-                polyChord[2] = 7;
-                polyChord[3] = 0;
-                maxPolyCount = 3;
-                if (polyCount == 4) {
-                  polyCount = 3;
-                }
-                superBreak = 3;
-              } else if (btn2Sts == LOW) {
-                drawPressed(2);
-                updateButtons();
-                polyChord[1] = 3;
-                polyChord[2] = 7;
-                polyChord[3] = 9;
-                maxPolyCount = 4;
-                superBreak = 3;
-              } else if (btn3Sts == LOW) {
-                drawPressed(3);
-                while (true) {
-                  if (superBreak > 0) {
-                    superBreak--;
-                    break;
-                  }
-                  display.clearDisplay();
-                  drawButtons();
-                  threeLine("Dim 7   1,b3,b5,7 >", "Minor 7  1,b3,5,b7>", "Next (2/3)-------->");
-                  updateButtons();
-                  display.display();
-                  if (btn1Sts == LOW) {
-                    drawPressed(1);
-                    updateButtons();
-                    polyChord[1] = 3;
-                    polyChord[2] = 6;
-                    polyChord[3] = 9;
-                    maxPolyCount = 4;
-                    superBreak = 4;
-                  } else if (btn2Sts == LOW) {
-                    drawPressed(2);
-                    updateButtons();
-                    polyChord[1] = 3;
-                    polyChord[2] = 7;
-                    polyChord[3] = 10;
-                    maxPolyCount = 4;
-                    superBreak = 4;
-                  } else if (btn3Sts == LOW) {
-                    drawPressed(3);
-                    updateButtons();
-                    while (true) {
-                      if (superBreak > 0) {
-                        superBreak--;
-                        break;
-                      }
-                      display.clearDisplay();
-                      drawButtons();
-                      threeLine("Dim       1,b3,b5 >", "Exit ------------->", "Next (3/3) ------->");
-                      updateButtons();
-                      display.display();
-                      if (btn1Sts == LOW) {
-                        drawPressed(1);
-                        updateButtons();
-                        polyChord[1] = 3;
-                        polyChord[2] = 6;
-                        polyChord[3] = 0;
-                        if (polyCount == 4) {
-                          polyCount = 3;
-                        }
-                        maxPolyCount = 3;
-                        superBreak = 5;
-                      } else if (btn2Sts == LOW) {
-                        drawPressed(2);
-                        updateButtons();
-                        superBreak = 5;
-                      } else if (btn3Sts == LOW) {
-                        drawPressed(3);
-                        updateButtons();
-                        superBreak = 2;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } else if (btn1Sts == LOW) {
-            drawPressed(1);
-            updateButtons();
-            break;
-          }
-        }
-      } else if (btn1Sts == LOW) {
-        drawPressed(1);
-        updateButtons();
-        break;
-      }
-    }
-  }
-}
-//want to move this to a seperate file, but for now it works
 
 //This function is now uneeded with the reposition of key and octave select to seperate choices in the idle screen
 //show the change key/oct settings
@@ -1450,9 +1092,9 @@ void showVars() {
   display.setCursor(20, 24);
   display.print(btn1Sts);
   display.setCursor(40, 24);
-  display.print(noteNums[0]);
+  display.print(noteNum);
   display.setCursor(60, 24);
-  display.print(prevNoteNums[0]);
+  display.print(prevnoteNum);
   display.setCursor(80, 24);
   //display.print(actionPerformed);
 
@@ -1545,7 +1187,8 @@ void liveInfo() {
 
     //modify the left side indicator to be inverted compared to normal to show that you are pitching left
     display.fillRect(32 - map(rawLeftPad, 0, 1023, 0, 32), 12, map(rawLeftPad, 0, 1023, 0, 32), 6, 1);  //the code to actually perform this is stupid
-    //because fillRect can't handle having a negative width, we have to draw from the left most side. Writting this comment after I wrote the code, I can't tell you how the line above works
+    //because fillRect can't handle having a negative width, we have to draw from the left most side
+    //Writting this comment after I wrote the code, I can't tell you how the line above works
   }
   display.drawRect(0, 11, 32, 8, 1);  //draw outline for left side
 
@@ -1639,9 +1282,9 @@ void music() {
   if ((rawPresRead >= lowerPrTr) && (rawPosRead >= ribbonDeadZone) && (isActive == true)) {  //if there is a change of notes and the controller is still active
 
 
-    if ((noteNums[0] != prevNoteNums[0]) && (trautoniumMode == false)) {  //If trautonium mode is disabled, run normally
-      if (allowInNotePB == true) {                                        //if in note pb is allowed then change the order of note switching, this will break seemless gliding!
-        noteOff();                                                        //turn off the previous note
+    if ((noteNum != prevnoteNum) && (trautoniumMode == false)) {  //If trautonium mode is disabled, run normally
+      if (allowInNotePB == true) {                                //if in note pb is allowed then change the order of note switching, this will break seemless gliding!
+        noteOff();                                                //turn off the previous note
         resetBend();
         noteOn(velocitySent);  //send new note
       } else {                 //otherwise play normally
