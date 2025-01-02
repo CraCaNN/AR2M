@@ -1,7 +1,7 @@
 # Quantonium/AR2M
 ![The full controller](https://github.com/CraCaNN/AR2M/blob/main/media/Quantonium.jpg)
 The Quantonium (Quantized-Trautonium) is a MIDI based ribbon controller, inspired by the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
-It's also a partial alternative to Doepfers [R2M](https://doepfer.de/R2M.htm) (Ribbon to MIDI system which is no longer in available), with the main difference being that this project is MIDI only and no CV\
+It's also a partial alternative to [Doepfers R2M](https://doepfer.de/R2M.htm) (Ribbon to MIDI system which is no longer in available), with the main difference being that this project is MIDI only and no CV\
 \
 Quantonium is the full instrument name\
 AR2M (Arduino Ribbon to MIDI) is the codebase name
