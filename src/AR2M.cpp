@@ -61,6 +61,9 @@ bool trautoniumMode = false;
 //sends note velocity data depending on how hard the note was pressed down, if set to false a note velocity of 127 will always be send
 bool dynamicVelocity = false;
 
+//how sensitive all pressure surfaces are
+int pressureSens = 0;//min -2, max +2, default 0
+
 //Control change pads
 int lftPotControlChanel = 1;  //Chooses which MIDI CC channel to send information out of from the left pad.
 int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send information out of from the right pad.
@@ -265,6 +268,7 @@ void setup() {
   //Initiate OLED
   Wire.setSDA(oledSDApin);  //Set the I2C library to use specific pins instead of the default
   Wire.setSCL(oledSCLpin);
+
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  //0x3D for 128x64, 0x3C for 128x32
   display.clearDisplay();                     //clear display
   display.display();
@@ -290,7 +294,7 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.4.6");  // will update this in every version hopefully
+  display.print("Version 2.5.0");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -316,7 +320,7 @@ void readPressure() {
   rawPresRead = analogRead(pressureRibbon);  //get data for activation of controller
 
   //I've deliberatly added a 'buffer' so that the pad activates the controller without sending any AT commands unless the pad is held down further
-  globalAT = map(constrain(rawPresRead, prBuffer, upperPres), prBuffer, upperPres, 0, 127);  //change data for use as a MIDI CC
+  globalAT = map(constrain(rawPresRead+pressureSens*50, prBuffer, upperPres), prBuffer, upperPres, 0, 127);  //change data for use as a MIDI CC
 
   if (globalAT != prevglobalAT) {                //only send an update if a change is detected in the pressure
     MIDI.sendAfterTouch(globalAT, MIDIchannel);  //otherwise only one channel is used
@@ -340,11 +344,13 @@ void readModWheel() {
   //get the current values
   rawRightPad = analogRead(pressurePadPinRht);
   rawLeftPad = analogRead(pressurePadPinLft);
+  pressurePotRhtRead = constrain(rawRightPad+pressureSens*50, 20, upperPresPads);
+  pressurePotLftRead = constrain(rawLeftPad+pressureSens*50, 20, upperPresPads);
   if (padPitchBend == false) {
 
-    pressurePotRhtRead = map(constrain(rawRightPad, 20, upperPresPads), 20, upperPresPads, 0, 127);  //read the right pressure pad and change from 0-upperPressure to 0-127
+    pressurePotRhtRead = map(pressurePotRhtRead, 20, upperPresPads, 0, 127);  //read the right pressure pad and change from 0-upperPressure to 0-127
     //gets the data, add a 'buffer' with constrain, map to fit with a MIDI CC channel
-    pressurePotLftRead = map(constrain(rawLeftPad, 20, upperPresPads), 20, upperPresPads, 0, 127);  //read the left pressure pad and change from 0-upperPressure to 0-127
+    pressurePotLftRead = map(pressurePotLftRead, 20, upperPresPads, 0, 127);  //read the left pressure pad and change from 0-upperPressure to 0-127
 
     if (pressurePotRhtRead != prevPressurePotRhtRead) {                              //only send if the current value is different to the previous value
       MIDI.sendControlChange(rhtPotControlChanel, pressurePotRhtRead, MIDIchannel);  //send modulation command
@@ -358,7 +364,7 @@ void readModWheel() {
   }
 
   else {                                                                                      //use pads as a pitch bend
-    pitchBendValue = map(rawRightPad, 0, 1024, 0, 8192) - map(rawLeftPad, 0, 1024, 0, 8192);  //gets the actual pitch bend value to send
+    pitchBendValue = map(rawRightPad, 0, upperPresPads, 0, 8192) - map(rawLeftPad, 0, upperPresPads, 0, 8192);  //gets the actual pitch bend value to send
     if (pitchBendValue != prevPitchBend) {                                                    //only send if the current value is different to the previous value
       MIDI.sendPitchBend(pitchBendValue, MIDIchannel);
       prevPitchBend = pitchBendValue;  //store current value to compare later
@@ -730,41 +736,117 @@ int numberSelect(const char* property, int currentValue, const int minimum, cons
   }
 }
 
+//Vidualise the available options as a range instead of numbers
+int barSelect(const char* property, int currentValue, const int minimum, const int maximum) {
+  int holdCounter = 0;
+  bool btnHold = false;
+  int holdDelay = 200;
+  while (true) {
+    display.clearDisplay();
+    drawButtons();
+    display.setCursor(0, 0);
+    display.print(property);
+    //Draw bar
+    display.drawRect(0,12,64,20,1);
+    display.fillRect(0,13,map(currentValue, minimum, maximum, 1,63), 19, 1);
+
+    //display.print(currentValue);
+    display.setTextSize(1);
+    display.setCursor(66, 0);
+    display.print("| Exit -");
+    display.setCursor(66, 12);
+    display.print("| Inc --");
+    display.setCursor(66, 24);
+    display.print("| Dec --");
+    display.display();
+    updateButtons();
+    if (btn1Sts == LOW) {
+      drawCross(1);
+      return currentValue;
+    } else if (btn2Sts == LOW) {
+      if (currentValue != maximum) {
+        drawDynamicPressed(2, holdDelay);
+        currentValue++;
+      } else {
+        drawCross(2);
+      }
+    } else if (btn3Sts == LOW) {
+      if (currentValue != minimum) {
+        drawDynamicPressed(3, holdDelay);
+        currentValue--;
+      } else {
+        drawCross(3);
+      }
+    }
+    //If the user is holding down the button then speed up the rate of change
+    if ((btn2Sts == LOW) || (btn3Sts == LOW)) {
+      holdCounter++;
+    } else {  //if let go of the button reset count
+      holdCounter = 0;
+    }
+
+    if (holdCounter >= 30) {
+      holdDelay = 15;
+    } else if (holdCounter >= 15) {
+      holdDelay = 50;
+    } else if (holdCounter >= 5) {
+      holdDelay = 100;
+    } else if (holdCounter < 5) {  //essentially if the button is let go, reset the delay amount
+      holdDelay = 200;
+    }
+    display.display();
+  }
+}
+
+//at the moment this func only contains MIDI CC changes
+void MIDISettings() {
+  while (true) {
+    updateButtons();
+    display.clearDisplay();
+    drawButtons();
+    display.setCursor(0, 0);
+    display.print("Exit --------------");
+    display.setCursor(0, 12);
+    display.print("Left CC (" + String(lftPotControlChanel) + ")");
+    for (int i = 19 - String("Left CC (" + String(lftPotControlChanel) + ")").length(); i != 0; i--) {  //print the right number of hyphens depending on the number of digits displated
+      display.print("-");
+    }
+
+    display.setCursor(0, 24);
+    display.print("Right CC (" + String(rhtPotControlChanel) + ")");
+    for (int i = 19 - String("Right CC (" + String(rhtPotControlChanel) + ")").length(); i != 0; i--) {  //stupid amount of String() is used but I cant seem to get anything else to work
+      display.print("-");
+    }
+
+    updateButtons();
+    if (btn1Sts == LOW) {
+      drawPressed(1);
+      break;
+    } else if (btn2Sts == LOW) {
+      drawPressed(2);
+      lftPotControlChanel = numberSelect("Left CC", lftPotControlChanel, 1, 127);
+    } else if (btn3Sts == LOW) {
+      drawPressed(3);
+      rhtPotControlChanel = numberSelect("Right CC", rhtPotControlChanel, 1, 127);
+    }
+    display.display();
+  }
+}
+
 //Main menu, uses a list/scroll system instead of the old page inteface
 void newMenu() {
   displayCount = 200;        //if the display was sleeping make it show the menu once the menu is exited
   int menuSelect = 0;        //The currently selected item
-  const int maxMenuNum = 6;  //the total number of menu items -1
-  const char* menuList[] = { "Exit Menu", "Ribbon Scale", "Pad Behaviour", "Trautonium Mode", "In Note PB", "Velocity Mode", "Pad Control Ch." };
-  char* menuListItemSts[] = { "" };  //TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!//maybe add a coresponding list to show current settings on the menu list
+  const int maxMenuNum = 7;  //the total number of menu items -1
+  const char* menuList[] = { "Exit Menu", "Ribbon Scale", "Pad Behaviour", "Trautonium Mode", "In Note PB", "Velocity Mode", "Pressure Sens.", "Pad Control Ch." };
+  //char* menuListItemSts[] = { "" };  //TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!//maybe add a coresponding list to show current settings on the menu list
 
   while (true) {
     display.clearDisplay();
     drawSideBar();
-  /*
-    //number indicator
-    display.setTextColor(0);
-    display.setCursor(121, 12);
-    display.print(menuSelect + 1);
 
-    display.setCursor(121, 1);
-    if (menuSelect == 0) {
-      display.print(maxMenuNum+1);
-    } else {
-      display.print(menuSelect);
-    }
-
-    display.setCursor(121, 23);
-    if (menuSelect == maxMenuNum) {
-      display.print(1);
-    } else {
-      display.print(menuSelect + 2);
-    }
-  */
     //Scroll bar
-    display.drawRect(116,(32/maxMenuNum)*(menuSelect*0.9),0,32/maxMenuNum+1,1);
-
-
+    display.drawRect(116, (32 / maxMenuNum) * (menuSelect * 0.9), 0, 32 / maxMenuNum + 1, 1);
 
     //the top menu option
     display.setCursor(1, 0);  //set cursor 1px out to show the full box
@@ -841,37 +923,10 @@ void newMenu() {
       } else if (menuSelect == 5) {
         dynamicVelocity = boolSelect("Dynamic Velocity", dynamicVelocity, "Disabled", "Enabled");
       } else if (menuSelect == 6) {
-        while (true) {  //this option needs an aditional sub-menu
-          updateButtons();
-          display.clearDisplay();
-          drawButtons();
-          display.setCursor(0, 0);
-          display.print("Exit --------------");
-          display.setCursor(0, 12);
-          display.print("Left CC (" + String(lftPotControlChanel) + ")");
-          for (int i = 19 - String("Left CC (" + String(lftPotControlChanel) + ")").length(); i != 0; i--) {  //print the right number of hyphens depending on the number of digits displated
-            display.print("-");
-          }
-
-          display.setCursor(0, 24);
-          display.print("Right CC (" + String(rhtPotControlChanel) + ")");
-          for (int i = 19 - String("Right CC (" + String(rhtPotControlChanel) + ")").length(); i != 0; i--) {  //stupid amount of String() is used but I cant seem to get anything else to work
-            display.print("-");
-          }
-
-          updateButtons();
-          if (btn1Sts == LOW) {
-            drawPressed(1);
-            break;
-          } else if (btn2Sts == LOW) {
-            drawPressed(2);
-            lftPotControlChanel = numberSelect("Left CC", lftPotControlChanel, 1, 127);
-          } else if (btn3Sts == LOW) {
-            drawPressed(3);
-            rhtPotControlChanel = numberSelect("Right CC", rhtPotControlChanel, 1, 127);
-          }
-          display.display();
-        }
+        pressureSens = barSelect("Pres. Sens.", pressureSens,  -2, 2);
+      }
+      else if (menuSelect == 7) {
+        MIDISettings();//was quite a large amount of code so it has been moved to a function
       } else {
         menuSelect = 0;
       }
