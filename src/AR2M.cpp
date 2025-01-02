@@ -229,9 +229,6 @@ int displayCount = 0;    //determines what is shown on the OLED
 int displaySpecial = 0;  //For showing screens non-normal such as key change
 int displayPage = 0;     //Detrmines special OLED pages such as menus or key/oct change
 
-int blinkPixel = false;  //one pixel on the screen blinks to show when the screen is redrawn, used to be more visable on the UNO R3 but now blinks very quickly thanks to the pico
-//even if this variable is true pixel blink will only occur if debug is also on
-
 //Show the position of the ribbon as a bar
 const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
 //width of the ribbon on the OLED / ((total ribbon size - the ribbon deadzone) / the note section size)
@@ -294,7 +291,7 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.5.0");  // will update this in every version hopefully
+  display.print("Version 2.5.1");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting in 2");
   display.display();
@@ -328,14 +325,17 @@ void readPressure() {
   }
 
   //Red LED indication, will light up if the pressure has surpassed the buffer, will then increase in intensity when AT is being sent
-  if (rawPresRead > lowerPrTr) {  //if left pad is in use turn on red led
-    if (globalAT > 0) {           //if pad is being held down more than the 'buffer'
-      analogWrite(rLed, map(globalAT, 0, 127, 205, 0));
-    } else {  //otherwise show a base value to show that the pad is in use but not being held down very firmly
-      analogWrite(rLed, 205);
+  //Only run if isActive is true
+  if (isActive == true){
+    if (rawPresRead > lowerPrTr) {  //if left pad is in use turn on red led
+      if (globalAT > 0) {           //if pad is being held down more than the 'buffer'
+        analogWrite(rLed, map(globalAT, 0, 127, 205, 0));
+      } else {  //otherwise show a base value to show that the pad is in use but not being held down very firmly
+        analogWrite(rLed, 205);
+      }
+    } else {  //otherwise turn off the red led
+      analogWrite(rLed, 255);
     }
-  } else {  //otherwise turn off the red led
-    analogWrite(rLed, 255);
   }
 }
 
@@ -578,6 +578,7 @@ void threeLine(const char* line1, const char* line2, const char* line3) {
 //inteanded for debugging
 //blink one pixel on the display so I can see when it's being updated and if the program is frozen
 void screenBlink() {
+  static bool blinkPixel = true;
   if (debug == true) {  //only turn on if debugging is on
     if (blinkPixel == false) {
       display.drawPixel(127, 0, 0);
@@ -591,18 +592,50 @@ void screenBlink() {
 
 //slowly fades the blue LED to indicate the device is still active but the OLED is off, Prevent burn in to preserve the pannels life
 void sleep() {
-  if (sleepLed == 255) {
-    sleepLedDir = false;
-  } else if (sleepLed == 130) {
-    sleepLedDir = true;
-  }
+  int rSleep = 0;
+  int gSleep = 0;
+  int bSleep = 0;
+  int stage = 0;
+  while (true){
+    
+    if (rSleep == 100){
+      stage = 1;
+    } else if (gSleep == 100) {
+      stage = 2;
+    } else if (bSleep == 100) {
+      stage = 3;
+    } else if ((rSleep == 100) && (stage != 0)) {
+      stage = 1;
+    }
 
-  if (sleepLedDir == true) {
-    sleepLed++;
-  } else {
-    sleepLed--;
+    if (stage == 0) {
+      rSleep++;
+    } else if (stage == 1) {
+      rSleep--;
+      gSleep++;
+    } else if (stage == 2) {
+      gSleep--;
+      bSleep++;
+    } else if (stage == 3) {
+      bSleep--;
+      rSleep++;
+    }
+    analogWrite(rLed, -rSleep+255);
+    analogWrite(gLed, -gSleep+255);
+    analogWrite(bLed, -bSleep+255);
+    //check for updates so we can break out of sleep
+    readPosition();
+    readPressure();
+    readModWheel();
+    if ((rawPosRead > ribbonDeadZone) || (rawPresRead > 10) || (rawRightPad > 20) || (rawLeftPad > 20)) {
+      analogWrite(rLed, 255);
+      analogWrite(gLed, 255);
+      analogWrite(bLed, 255);
+      break;
+    }
+
+    delay(25);
   }
-  analogWrite(bLed, sleepLed);
 }
 
 void alert(const char* line1, const char* line2, const char* line3) {
@@ -1278,14 +1311,14 @@ void oledScreen() {
         liveInfo();
         displayCount++;
         analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-        sleepLed = 255;          //reset sleep vars to make it neater
-        sleepLedDir = false;
+        //sleepLed = 255;          //reset sleep vars to make it neater
+        //sleepLedDir = false;
       } else if (displayCount < 1500) {  //otherwise show the menu display
         idleDisplay();
         displayCount++;
         analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-        sleepLed = 255;          //reset sleep vars to make it neater
-        sleepLedDir = false;
+        //sleepLed = 255;          //reset sleep vars to make it neater
+        //sleepLedDir = false;
       } else if (displayCount >= 1500) {
         display.clearDisplay();
         display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
