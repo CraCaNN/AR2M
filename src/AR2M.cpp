@@ -73,7 +73,8 @@ int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send informatio
 bool debug = false;  //set to true to show more variables on the OLED
 
 //determines what list is currently in use, 0 is diatonic, 1 is chromatic
-bool noteListSelect = 0;
+int noteListSelect = 0;
+//look at noteNumberMatrix if you wish to add or change scales
 //END OF CONFIG OPTIONS//
 
 //SENSOR CONFIG//
@@ -81,7 +82,8 @@ bool noteListSelect = 0;
 
 //Position Ribbon
 //The ribbons deadzone size. Since when the ribbon isn't in use the value read drops to a low number, usually less than 10. This is one of the ways how the controller determines if the ribbon isn't in use. this value works for my ribbon: (https://coolcomponents.co.uk/products/softpot-membrane-potentiometer-500mm)
-const int ribbonDeadZone = 32;
+//const int ribbonDeadZone = 32; moved to be calibrated during setup
+
 
 //Aftertouch ribbon
 const int lowerPrTr = 500;  //set the minimum amount of pressure needed for the pressure ribon to activate
@@ -190,6 +192,19 @@ const int noteNumberList[] = {
 };
 //C2 Is repeated twice since the start of the ribbon is cut off by the dead zone
 
+//Matrix of note scales
+//Can change it later but theoretically supports 99 scales, up to 19 notes long
+const int noteNumberMatrix[100][20] = {
+  {60,62,64,65,67,69,71,-1},
+  {60,61,62,63,64,65,66,67,68,69,70,71,-1},
+  {-1}
+};
+//-1 is needed at the end of each array to determine the end of the array
+//-1 at the end of the table indicates the end of the table, helps determine the total number of scales in the array
+
+//Names of the scales
+const char* noteNumberMatrixName[] = {"Diatonic", "Chromatic"};
+
 //Chromatic scale of notes
 const int noteNumListSharp[] = {
   21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
@@ -216,6 +231,7 @@ const char* noteNumNameNoSharp[] = {
   "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9", "MAX", "MAX", "MAX", "MAX",
   "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX", "MAX"
 };
+
 //deffinatly a better way of doing this but it works for now
 //no this wasn't typed out manually, I made a python script to do it for me
 
@@ -228,11 +244,6 @@ int currentNote = 0;
 int displayCount = 0;    //determines what is shown on the OLED
 int displaySpecial = 0;  //For showing screens non-normal such as key change
 int displayPage = 0;     //Detrmines special OLED pages such as menus or key/oct change
-
-//Show the position of the ribbon as a bar
-const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
-//width of the ribbon on the OLED / ((total ribbon size - the ribbon deadzone) / the note section size)
-//Essentially how big would each note section would be if you shrunk the ribbon down to the size of the screen
 
 //The position of the ribbon indicator
 int ribbonDisplayPos = 0;
@@ -248,6 +259,7 @@ Adafruit_SSD1306 display(128, 32, &Wire, -1);
 Adafruit_USBD_MIDI usb_midi;  // USB MIDI object
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 
+int ribbonDeadZone;
 
 void setup() {
   USBDevice.setManufacturerDescriptor("Quantized Trautonium/Arduino Ribbon to MIDI");
@@ -293,22 +305,68 @@ void setup() {
   display.setCursor(0, 12);
   display.print("Version 2.5.1");  // will update this in every version hopefully
   display.setCursor(0, 24);
-  display.print("Starting in 2");
+  display.print("Starting up...");
   display.display();
-  delay(500);
-  analogWrite(bLed, 255);
-  display.print("..");
+  delay(1000);
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print("Calibrating main ribbon");
+  display.setCursor(0,12);
+  display.print("Do not touch!");
   display.display();
-  delay(500);
-  analogWrite(gLed, 255);
-  display.print("1");
+  display.setCursor(0,24);
+  delay(2000);
+
+  int ribbonCalibration[5] = {};
+
+  for(int i;i==4;i++) {
+    while (true){
+      if (analogRead(pressureRibbon) > 100) {//if pressure is detected ask user to not
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.print("Ribbon activity!");
+        display.setCursor(0,12);
+        display.print("Please release from ribbon");
+        display.setCursor(0,24);
+        display.print("Will try again in 5 secs...");
+        display.display();
+        delay(5000);
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.print("Calibrating pos. ribbon");
+        display.setCursor(0,12);
+        display.print("Do not touch!");
+        display.setCursor(0,24);
+        display.display();
+      } else {//if no activity is detected store value, break and repeat
+        ribbonCalibration[i] = analogRead(softpotPin);
+        display.print("..");
+        delay(200);
+        break;
+      }
+    }
+  }
+  ribbonDeadZone = ((ribbonCalibration[0] + ribbonCalibration[1] + ribbonCalibration[2] + ribbonCalibration[3] + ribbonCalibration[4])/5)+5;//get average result plus a little bit to affset the way decimals are turned into integers
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print("Ribbon calibrated!");
+  display.setCursor(0,12);
+  display.print("Calbration results:");
+  display.setCursor(0,24);
+  display.print(String(ribbonCalibration[0]) + ", "+ String(ribbonCalibration[1]) + ", "+ String(ribbonCalibration[2]) + ", "+ String(ribbonCalibration[3]) + ", "+ String(ribbonCalibration[4]) + " - "+ ribbonDeadZone);
   display.display();
-  delay(500);
-  analogWrite(rLed, 255);
-  display.print("..");
+  delay(2000);
+  display.clearDisplay();
+  display.setCursor(0,12);
+  display.print("Startup complete!");
   display.display();
-  delay(500);
+  delay(1000);
 }
+
+//Show the position of the ribbon as a bar
+const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
+//width of the ribbon on the OLED / ((total ribbon size - the ribbon deadzone) / the note section size)
+//Essentially how big would each note section would be if you shrunk the ribbon down to the size of the screen
 
 //START OF MUSIC FUNCTIONS//
 
@@ -397,14 +455,13 @@ void readPosition() {
 //Could easily modify this to add custom scales instead of the major scale
 //gets the ribbon position and the note number.
 void noteSelect() {
-  softPotReading = rawPosRead / sectionSize;                                      //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
+  softPotReading = rawPosRead-ribbonDeadZone / sectionSize;                       //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
   if (noteListSelect == 0) {                                                      //if playing in diatonic
     noteNum = constrain(noteNumberList[softPotReading] + totalOffSet, 0, 127);    //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
   } else {                                                                        //if playing in chromatic
     noteNum = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
   }
 }
-
 
 
 //sends the MIDI note on command, expects a velocity value
