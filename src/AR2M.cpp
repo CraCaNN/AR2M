@@ -270,6 +270,10 @@ void setup() {
   pinMode(gLed, OUTPUT);
   pinMode(bLed, OUTPUT);
 
+  digitalWrite(rLed, HIGH);
+  digitalWrite(gLed, HIGH);
+  digitalWrite(bLed, HIGH);
+
   //display.setRotation(2);//uncomment to flip the display
 
   //Serial.begin(31250);//Serial can be enabled without interupting MIDI, but currently nothing uses Serial
@@ -303,57 +307,57 @@ void setup() {
   display.setCursor(0, 0);
   display.print("Quantonium/AR2M");
   display.setCursor(0, 12);
-  display.print("Version 2.5.1");  // will update this in every version hopefully
+  display.print("Beta 2.6.0");  // will update this in every version hopefully
   display.setCursor(0, 24);
   display.print("Starting up...");
   display.display();
   delay(1000);
   display.clearDisplay();
   display.setCursor(0,0);
-  display.print("Calibrating main ribbon");
+  display.print("Calibrating position");
   display.setCursor(0,12);
   display.print("Do not touch!");
   display.display();
-  display.setCursor(0,24);
   delay(2000);
 
   int ribbonCalibration[5] = {};
 
-  for(int i;i==4;i++) {
+
+  for(int i = 0; i <= 4; i++) {
     while (true){
       if (analogRead(pressureRibbon) > 100) {//if pressure is detected ask user to not
         display.clearDisplay();
         display.setCursor(0,0);
         display.print("Ribbon activity!");
         display.setCursor(0,12);
-        display.print("Please release from ribbon");
+        display.print("Please release ");
         display.setCursor(0,24);
-        display.print("Will try again in 5 secs...");
+        display.print("Will continue in 5");
         display.display();
         delay(5000);
+      } else {//if no activity is detected store value, break and repeat
+        ribbonCalibration[i] = analogRead(softpotPin);
         display.clearDisplay();
         display.setCursor(0,0);
-        display.print("Calibrating pos. ribbon");
+        display.print("Calibrating position");
         display.setCursor(0,12);
         display.print("Do not touch!");
         display.setCursor(0,24);
+        display.print(String(i+1)+ "/5");
         display.display();
-      } else {//if no activity is detected store value, break and repeat
-        ribbonCalibration[i] = analogRead(softpotPin);
-        display.print("..");
         delay(200);
         break;
       }
     }
   }
-  ribbonDeadZone = ((ribbonCalibration[0] + ribbonCalibration[1] + ribbonCalibration[2] + ribbonCalibration[3] + ribbonCalibration[4])/5)+5;//get average result plus a little bit to affset the way decimals are turned into integers
   display.clearDisplay();
+  ribbonDeadZone = ((ribbonCalibration[0] + ribbonCalibration[1] + ribbonCalibration[2] + ribbonCalibration[3] + ribbonCalibration[4])/5)+10;//get average result plus a little bit since the noise increases when you approach the contorller
   display.setCursor(0,0);
   display.print("Ribbon calibrated!");
   display.setCursor(0,12);
   display.print("Calbration results:");
   display.setCursor(0,24);
-  display.print(String(ribbonCalibration[0]) + ", "+ String(ribbonCalibration[1]) + ", "+ String(ribbonCalibration[2]) + ", "+ String(ribbonCalibration[3]) + ", "+ String(ribbonCalibration[4]) + " - "+ ribbonDeadZone);
+  display.print(String(ribbonCalibration[0]) + ", "+ (ribbonCalibration[1]) + ", "+ (ribbonCalibration[2]) + ", "+ (ribbonCalibration[3]) + ", "+ (ribbonCalibration[4]) + " |s "+ (ribbonDeadZone-10));
   display.display();
   delay(2000);
   display.clearDisplay();
@@ -455,7 +459,7 @@ void readPosition() {
 //Could easily modify this to add custom scales instead of the major scale
 //gets the ribbon position and the note number.
 void noteSelect() {
-  softPotReading = rawPosRead-ribbonDeadZone / sectionSize;                       //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
+  softPotReading = (rawPosRead-ribbonDeadZone) / sectionSize;                       //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
   if (noteListSelect == 0) {                                                      //if playing in diatonic
     noteNum = constrain(noteNumberList[softPotReading] + totalOffSet, 0, 127);    //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
   } else {                                                                        //if playing in chromatic
