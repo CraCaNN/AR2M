@@ -37,6 +37,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //These options change how the controller behaves and you can modify to set the default behaviour on boot
 //change the 'size' of the note sections on the ribbon. Increase the number to make the sections bigger or decrease the number to make the sections smaller. make sure you have enough notes in the note list if you make the section size smaller
 int sectionSize = 32;
+int numOfSections = 32;
 //Recommended sizes are:
 //32 can fit 4 octaves 3 notes. (Default)
 //28 can fit 5 octaves.
@@ -73,7 +74,7 @@ int rhtPotControlChanel = 2;  //Chooses which MIDI CC channel to send informatio
 bool debug = false;  //set to true to show more variables on the OLED
 
 //determines what list is currently in use, 0 is diatonic, 1 is chromatic
-int noteListSelect = 0;
+int noteScale = 0;
 //look at noteNumberMatrix if you wish to add or change scales
 //END OF CONFIG OPTIONS//
 
@@ -174,13 +175,9 @@ int noteNum;
 //prevnoteNum is also the current note(s) playing but is not updated when a new note is played. This helps the controller to determine which note to turn off
 int prevnoteNum;
 
-//LED
-int sleepLed = 255;        //fade the led when OLED is inactive
-bool sleepLedDir = false;  //allows the led to fade up and down without going to max brightness
-
 //MISC
 int superBreak = 0;  //Helps me get out of deep sub menus
-
+int selectedKey; //The key that the user has pressed
 
 //NOTE LISTS//Lists to reference from to get the note to play
 //These lists are what the code references when deciding what note to send + any offsets applied
@@ -201,6 +198,8 @@ const int noteNumberMatrix[100][20] = {
 };
 //-1 is needed at the end of each array to determine the end of the array
 //-1 at the end of the table indicates the end of the table, helps determine the total number of scales in the array
+//the first note (position 0) in each row will be positioned at the middle of the ribbon, the program will work out how to repeat the lower and upper sections
+
 
 //Names of the scales
 const char* noteNumberMatrixName[] = {"Diatonic", "Chromatic"};
@@ -260,6 +259,73 @@ Adafruit_USBD_MIDI usb_midi;  // USB MIDI object
 MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 
 int ribbonDeadZone;
+int sectionCount;
+int ribbonSection;
+
+int activeNoteArray[] = {};
+int middleSection = numOfSections/2;
+int scaleRange;
+
+int totalRibbon;
+
+//works out what notes are put into the activeArray
+void calculateScale() {
+  for (int i; i!=33; i++){//clear the active array
+    activeNoteArray[i] = 0;
+  }
+
+  int scaleSize=0;
+  while (true){
+    int isLastNumber;
+    isLastNumber = noteNumberMatrix[noteScale][scaleSize];
+    if (isLastNumber == -1) {
+      break;
+    } else {
+      scaleSize++;
+    }
+  }
+  scaleRange = (noteNumberMatrix[noteScale][scaleSize-1] - noteNumberMatrix[noteScale][0])+1;
+
+  //calculate the notes forward of the mid point
+  int f = middleSection;
+  int noteF = 0;
+
+  int octaveF = 0;
+  while (true) {
+    if (f==32) {//have we reached just after the end of activeArray?
+      break;//if so then we have reached the upper sections of the ribbon, and can break from wile loop...
+    }
+    //if not...
+    if (noteNumberMatrix[noteScale][noteF] == -1){//have we reached the end of the scale?
+      noteF = 0;//if so then reset to the beginning of the scale
+      octaveF++;
+    }
+    activeNoteArray[f] = noteNumberMatrix[noteScale][noteF]+(octaveF*(scaleRange));//add note to the active array
+    noteF++;//incrament note number scale
+    f++;//incrament ribbon section count
+  }
+  
+  //calculate the notes behind of the mid point
+  int b = middleSection - 1;
+  int noteB = scaleSize - 1;
+
+  int octaveB = 1;
+  while (true) {
+    if (b == -1) {//have we reached just before the beginning of activeArray?
+      break;//if so then we have reached the lower sections of the ribbon, and can break from wile loop...
+    }
+    //if not...
+    if (noteB == -1){//have we reached the beginning of the scale?
+      noteB = scaleSize - 1;//if so then reset to the end of the scale
+      octaveB++;
+    }
+    activeNoteArray[b] = noteNumberMatrix[noteScale][noteB]-(octaveB*(scaleRange));//add note to the active array
+    noteB--;//decrement note number scale
+    b--;//decrement ribbon section count
+  }
+  
+  activeNoteArray[32] = -1;
+}
 
 void setup() {
   USBDevice.setManufacturerDescriptor("Quantized Trautonium/Arduino Ribbon to MIDI");
@@ -275,8 +341,6 @@ void setup() {
   digitalWrite(bLed, HIGH);
 
   //display.setRotation(2);//uncomment to flip the display
-
-  //Serial.begin(31250);//Serial can be enabled without interupting MIDI, but currently nothing uses Serial
 
   //Initiate OLED
   Wire.setSDA(oledSDApin);  //Set the I2C library to use specific pins instead of the default
@@ -357,15 +421,27 @@ void setup() {
   display.setCursor(0,12);
   display.print("Calbration results:");
   display.setCursor(0,24);
-  display.print(String(ribbonCalibration[0]) + ", "+ (ribbonCalibration[1]) + ", "+ (ribbonCalibration[2]) + ", "+ (ribbonCalibration[3]) + ", "+ (ribbonCalibration[4]) + " |s "+ (ribbonDeadZone-10));
+  display.print(String(ribbonCalibration[0]) + ", "+ (ribbonCalibration[1]) + ", "+ (ribbonCalibration[2]) + ", "+ (ribbonCalibration[3]) + ", "+ (ribbonCalibration[4]) + " | "+ (ribbonDeadZone-10));
   display.display();
+
+
+
+  calculateScale();
   delay(2000);
   display.clearDisplay();
   display.setCursor(0,12);
   display.print("Startup complete!");
   display.display();
   delay(1000);
+  sectionCount = (1024-ribbonDeadZone)/sectionSize;
+  totalRibbon = 1024-ribbonDeadZone;
 }
+
+
+
+//takes one octave and fills in the rest of the ribbon
+
+
 
 //Show the position of the ribbon as a bar
 const int showNoteSecSize = 126 / ((1024 - ribbonDeadZone) / sectionSize);  //gets the size in number of pixels to display to the OLED
@@ -456,17 +532,21 @@ void readPosition() {
   }
 }
 
+/*
+TODO move the scale/activeArray calculation to a funciton and update upon scale change!!!
+Add 0/127 note limiter
+*/
+
 //Could easily modify this to add custom scales instead of the major scale
 //gets the ribbon position and the note number.
+
 void noteSelect() {
-  softPotReading = (rawPosRead-ribbonDeadZone) / sectionSize;                       //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
-  if (noteListSelect == 0) {                                                      //if playing in diatonic
-    noteNum = constrain(noteNumberList[softPotReading] + totalOffSet, 0, 127);    //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
-  } else {                                                                        //if playing in chromatic
-    noteNum = constrain(noteNumListSharp[softPotReading] + offSetSharp, 0, 127);  //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
+  softPotReading = (rawPosRead-ribbonDeadZone) / sectionSize;                     //divide the reading by sectionSize to fit bigger 'sections' on the ribbon
+  selectedKey = activeNoteArray[softPotReading]+offSetKey+(scaleRange*octaveOffSet);
+  if (isActive == true) {                                                   //if playing in diatonic
+    noteNum = selectedKey;    //get the MIDI note number(s) to send and also prevent the number from exceeding the MIDI note number range
   }
 }
-
 
 //sends the MIDI note on command, expects a velocity value
 void noteOn(int velocity) {
@@ -983,7 +1063,8 @@ void newMenu() {
       if (menuSelect == 0) {
         break;
       } else if (menuSelect == 1) {
-        noteListSelect = boolSelect("Ribbon Scale", noteListSelect, "Diatonic", "Chromatic");
+        noteScale = boolSelect("Ribbon Scale", noteScale, "Diatonic", "Chromatic");
+        calculateScale();
       } else if (menuSelect == 2) {
         padPitchBend = boolSelect("Pad Behaviour", padPitchBend, "Send CC", "Send Pitch Bend");
         if ((padPitchBend == true) && (trautoniumMode == true)) {
@@ -1189,7 +1270,7 @@ void idleDisplay() {
 
   //Show ribbon only status
   display.setCursor(0, 0);
-  if (noteListSelect == 0) {
+  if (noteScale == 0) {
     display.print("Change Octave: ");
     if (octaveOffSet >= 0) {
       display.print("+");
@@ -1204,7 +1285,7 @@ void idleDisplay() {
   display.print("Main Menu ---------");
 
   display.setCursor(0, 24);
-  if (noteListSelect == 0) {
+  if (noteScale == 0) {
     display.print("Change Key: ");
     display.print(keyList[offSetKey]);
     display.print(" ----");
@@ -1255,46 +1336,42 @@ void liveInfo() {
   display.clearDisplay();
   display.setTextColor(1);
 
-  //This if statement is responcible for changing how the current note is displayed
+  //This if statement is responsible for changing how the current note is displayed
   if (analogRead(softpotPin) > ribbonDeadZone) {                               //only show a note if there is a valid reading
     display.setTextSize(3);                                                    //make the note size big
-    if (noteListSelect == 0) {                                                 //if using diatonic
-      currentNote = noteNumberList[rawPosRead / sectionSize] + totalOffSet;    //get note from diatonic list
-    } else {                                                                   //otherwise
-      currentNote = noteNumListSharp[rawPosRead / sectionSize] + offSetSharp;  //get it from the all note list
-    }
+    
 
-    if (String(noteNumNameNoSharp[currentNote]).length() == 3) {  //if the note is 3 characters long centre the note
+    if (String(noteNumNameNoSharp[selectedKey]).length() == 3) {  //if the note is 3 characters long centre the note
       if (isActive == true) {                                     //if the controller is sending midi then invert the big note number colour and draw a white box behind the note number
         display.setCursor(38, 1);
         display.setTextColor(0);
         display.fillRect(36, 0, 55, 23, 1);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
       } else {  //otherwise show it normally
         display.setCursor(38, 1);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
       }
-    } else if (String(noteNumNameNoSharp[currentNote]).length() >= 4) {  //if the note is 4 characters long...
+    } else if (String(noteNumNameNoSharp[selectedKey]).length() >= 4) {  //if the note is 4 characters long...
       if (isActive == true) {
         display.setTextSize(2);    //make the text smaller
         display.setCursor(42, 5);  //and reposition
         display.setTextColor(0);
         display.fillRect(36, 0, 55, 23, 1);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
         display.setTextColor(1);
       } else {  //otherwise show it normally
         display.setCursor(42, 5);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
       }
     } else {                   // otherwise it must be a 2 character note
       if (isActive == true) {  //if the controller is sending midi then invert the big note number
         display.setCursor(47, 1);
         display.setTextColor(0);
         display.fillRect(45, 0, 37, 23, 1);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
       } else {  //otherwise show it normally
         display.setCursor(47, 1);
-        display.print(noteNumNameNoSharp[currentNote]);
+        display.print(noteNumNameNoSharp[selectedKey]);
       }
     }
     //ribbon position visualiser, the show width is to scale of the note section size
@@ -1372,14 +1449,10 @@ void oledScreen() {
         liveInfo();
         displayCount++;
         analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-        //sleepLed = 255;          //reset sleep vars to make it neater
-        //sleepLedDir = false;
       } else if (displayCount < 1500) {  //otherwise show the menu display
         idleDisplay();
         displayCount++;
         analogWrite(bLed, 255);  //turn off the blue led if its in the sleep state
-        //sleepLed = 255;          //reset sleep vars to make it neater
-        //sleepLedDir = false;
       } else if (displayCount >= 1500) {
         display.clearDisplay();
         display.display();  //turn the OLED off if not in use, since its an OLED the screen is prone to burn ins
@@ -1399,6 +1472,7 @@ void music() {
   readPressure();  //get pressure
   readModWheel();  //update pressure pads
   noteSelect();    //get the note from the position data
+  
   if (isActive == true) {
     activePB();
   }
@@ -1448,7 +1522,7 @@ void music() {
     }
   }
 
-  //needed to
+  //Resets the velocity check cooldown, don't know why it needed to be under isValid instead of isActive
   if (((rawPresRead < lowerPrTr) || (rawPosRead < ribbonDeadZone)) && (isValid == true)) {
     velocityWait = 0;
   }
@@ -1462,6 +1536,8 @@ void music() {
 }
 
 void loop() {  //The main loop itself doesn't play any music, it did controll the start behaviour before music() was rewritten
+
+
   music();
   oledScreen();  //determines what is displayed to the screen when the instrument can be played, does not controll this during menus
 
@@ -1470,7 +1546,7 @@ void loop() {  //The main loop itself doesn't play any music, it did controll th
     updateButtons();
     if (btn1Sts == LOW) {
       idleDisplay();
-      if (noteListSelect == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
+      if (noteScale == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
         drawPressed(1);
         updateButtons();
         displayPage = 3;
@@ -1489,7 +1565,7 @@ void loop() {  //The main loop itself doesn't play any music, it did controll th
       analogWrite(bLed, 255);
     } else if (btn3Sts == LOW) {
       idleDisplay();
-      if (noteListSelect == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
+      if (noteScale == 0) {  //only allow an oct/key change if using diatonic and NOT chromatic. Since Chromatic offsets are programmed differently and dont use the offsets made for Diatonic mode
         drawPressed(3);
         updateButtons();
         displayPage = 2;
