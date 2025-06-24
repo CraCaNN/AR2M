@@ -1,8 +1,3 @@
-# Hardware revison in progress
-I am currently working on switching over from the RP2040 to the ESP32-S3 for increased speed and functionality.\
-This will allow for a touchscreen, wireless play and quicker process times.\
-I hope to complete this by the end of summer 2025, but this is very much subject to my free time :)
-
 # Quantonium/AR2M
 ![The full controller](https://github.com/CraCaNN/AR2M/blob/main/media/Quantonium.jpg)
 The Quantonium (Quantized-Trautonium) is a MIDI based ribbon controller, inspired by the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
