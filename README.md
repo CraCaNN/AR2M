@@ -1,3 +1,16 @@
+# REDESIGN IN PROGRESS!
+**SIGNIFICANT CHANGES TO THE CODE WILL BE MADE!**\
+As such I will be working towards a v3 release for the program\
+v3 will not be backwards compatible with v2 hardware without significant changes to either the hardware or software!\
+\
+As I write this I've got the first PCBs back today, In the fairly near future this will add a touch screen interface and customisable buttons. \
+\
+In the nearish future this will allow options to be saved to the controller (small iteration of the PCB)\
+\
+In the distant future this may work its way towards wireless play, CV/gate & direct audio out, multi-ribbon designs and maybe more (major iteration(s) of the PSB)\
+\
+If there is enough interest I **may** release the diagram/PCB files, some things I need to work out before then.\
+I also plan on getting the main body machined from a CNC, so those files may find their way here as well.
 # Quantonium/AR2M
 ![The full controller](https://github.com/CraCaNN/AR2M/blob/main/media/Quantonium.jpg)
 The Quantonium (Quantized-Trautonium) is a MIDI based ribbon controller, inspired by the [Modulin](https://www.youtube.com/watch?v=QaW5K85UDR0) made by [Wintergatan](https://www.youtube.com/@Wintergatan).\
