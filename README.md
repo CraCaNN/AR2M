@@ -7,7 +7,7 @@ As I write this I've got the first PCBs back today, In the fairly near future th
 \
 In the nearish future this will allow options to be saved to the controller (small iteration of the PCB)\
 \
-In the distant future this may work its way towards wireless play, CV/gate & direct audio out, multi-ribbon designs and maybe more (major iteration(s) of the PSB)\
+In the distant future this may work its way towards wireless play, CV/gate & direct audio out, multi-ribbon designs and maybe more (major iteration(s) of the PCB)\
 \
 If there is enough interest I **may** release the diagram/PCB files, some things I need to work out before then.\
 I also plan on getting the main body machined from a CNC, so those files may find their way here as well.
