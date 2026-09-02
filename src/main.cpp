@@ -1,12 +1,28 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <MIDI.h>
+#include <Adafruit_TinyUSB.h>
+#include <MIDI.h>
 
 // Create TFT object
 TFT_eSPI tft = TFT_eSPI();
 
-// Define button structure
+//https://rgbcolorpicker.com/565
+//Custom Colours here (yes I'm from the UK)
 
+
+
+
+//Pin Configuration that does not include the display
+const int btn1 = 4;
+const int btn2 = 5;
+const int btn3 = 6;
+
+const int rLED = 8;
+const int gLED = 9;
+const int bLED = 10;
+
+// Define button structure
 
 //the ID will just be the position within the array
 //parentID is where each sub-menu came from in 
@@ -58,14 +74,9 @@ configLayout mainConfig[10] = {
 };
 
 
-struct Button {
-  uint16_t x, y, w, h;
-  uint16_t bgColor, textColor, borderColor;
-  String label;
-  bool pressed;
-};
 
-/*
+
+/*//just some test stuff
 struct example  {
   int eg1, eg2;
   String eg3;
@@ -88,42 +99,59 @@ example testVar2[4] = {
 example *pBtnArray[2] = {testVar1, testVar2};
 */
 
-int buttonArrayLen[]= {8,5}; //this will need to be updated, defines the length of each array
+//The Button element defines the interactable part of the screen
+struct Button {
+  uint16_t x, y, w, h;
+  uint16_t bgColor, textColor, borderColor;
+  String label;
+  bool pressed;
+};
+
+int buttonArrayLen[]= {8,10}; //this will need to be updated, defines the length of each array, my Python head is screaming to use len()
 
 //Probably worth staticing these arrays if possible
 // 0
 Button infoButtons[8] = {
-  {0,0,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"Button 1",false},
-  {0,80,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"Button 2",false},
-  {0,160,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"Button 3",false},
-  {20,200,199,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Current Key",false},
-  {200,200,39,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Current Oct",false},
-  {0,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Quick Acc 1",false},
-  {119,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Quick Acc 2",false},
+    
+  {0,0,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"1",false},
+  {0,80,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"2",false},
+  {0,160,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"3",false},
+  {20,200,199,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Key",false},
+  {200,200,39,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Oct",false},
+  {0,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 1",false},
+  {119,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 2",false},
   {80,285,80,44,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Menu",false}
 };
 
 // 1
-Button mainMenuButtons[5] = {
+Button mainMenuButtons[10] = {
+  //static elements of the menu
   {0,0,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"^",false},
   {0,80,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,">",false},
   {0,160,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"v",false},
-  {8,200,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Exit Menu",false},
-  {128,200,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Return",false}
+  {8,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Exit Menu",false},
+  {128,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Return",false},
+
+  //Dynamic elements, 
+  {50,0,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "T Item", false},
+  {50,40,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "TM Item", false},
+  {50,80,190,79,TFT_BLACK, TFT_WHITE, TFT_WHITE, "M Item", false},
+  {50,164,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "BM Item", false},
+  {50,204,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "B Item", false}
 };
 
 
-//The saviour of several KB of storage and processing power
-Button *pBtnArray[2] = {infoButtons, mainMenuButtons};// this honestly took me several hours to come up with, if this didnt work each layout would have to have its own function wo work out what button was pressed
+//The saviour of several KB of flash, processing power, and hopefully more hours of my life than it did to figure this out
+Button *pBtnArray[2] = {infoButtons, mainMenuButtons};// this honestly took me several hours to come up with, if this didnt work each layout would have to have its own function to work out what button was pressed
 
 
 
 void drawButton(Button &btn) {
   // Draw border
-  tft.drawRect(btn.x, btn.y, btn.w, btn.h, btn.borderColor);
+  tft.drawRoundRect(btn.x, btn.y, btn.w, btn.h, 10, btn.borderColor);
   
   // Draw background
-  tft.fillRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2, btn.bgColor);
+  tft.fillRoundRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2, 10, btn.bgColor);
 
   // Draw text centered
   tft.setTextColor(btn.textColor, btn.bgColor);
@@ -262,15 +290,33 @@ void bootScreen() {
   tft.fillRoundRect(0,200,50,400,10,TFT_BLACK);
   tft.drawRoundRect(0,200,50,400,10,TFT_WHITE);
   
-  // Draw all buttons
- 
-  delay(1000);
+  delay(250);
+  digitalWrite(rLED,HIGH);
+  delay(250);
+  digitalWrite(rLED,LOW);
+  digitalWrite(gLED,HIGH);
+  delay(250);
+  digitalWrite(gLED,LOW);
+  digitalWrite(bLED,HIGH);
+  delay(250);
+  digitalWrite(bLED,LOW);
 }
 
 void setup() {
-  Serial.begin(115200);
+  USBDevice.setManufacturerDescriptor("Quantized Trautonium/Arduino Ribbon to MIDI");
+  USBDevice.setProductDescriptor("Quantonium/AR2M");  //This is what shows up under your MIDI device selection, if you want to have a bit of fun :)
+
+  Serial1.begin(115200);//might be serial1 or serial I can't remember
   uint16_t calData[5] = {399, 3402, 443, 3438, 4};
+
+  pinMode(btn1,INPUT_PULLDOWN);
+  pinMode(btn2,INPUT_PULLDOWN);
+  pinMode(btn3,INPUT_PULLDOWN);
   
+  pinMode(rLED, OUTPUT);
+  pinMode(gLED, OUTPUT);
+  pinMode(bLED, OUTPUT);
+
   // Initialize TFT
   tft.init();
   //tft.setRotation(1);  // Landscape mode
