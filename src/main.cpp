@@ -75,118 +75,117 @@ configLayout mainConfig[10] = {
 
 
 
+/*
+  tft.print("Text here")
+  tft.setCursor(0,0);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextFont(fontVar);
 
-/*//just some test stuff
-struct example  {
-  int eg1, eg2;
-  String eg3;
-};
+Acording to AI these are the various different buit-in fonts for setTextFont
+Value 	    Font Name	  Description	                    Size/Height
+0 or GLCD	  GLCD	      Classic   Adafruit GFX font   	5×7 pixels
+2 or FONT2	Font 2    	Standard  bitmap font	          16 pixels high
+4 or FONT4	Font 4    	Medium  bitmap font           	26 pixels high
+6 or FONT6	Font 6    	Large bitmap font	              48 pixels high
+7 or FONT7	Font 7    	7-segment display style       	Numeric display
+8 or FONT8	Font 8    	Large numeric font             	For numbers/digits
 
-example testVar1[4] = {
-  {0,1,"Hello World"},
-  {2,3,"Hello World"},
-  {4,5,"Hello World"},
-  {6,7,"Hello World"},
-};
-
-example testVar2[4] = {
-  {10,11,"Worlds spinning"},
-  {12,13,"Worlds spinning"},
-  {14,15,"Worlds spinning"},
-  {16,17,"Worlds spinning"},
-};
-
-example *pBtnArray[2] = {testVar1, testVar2};
+Therefore a rule for text fonts for this struct:
+if the font integer is positive it will refer to the table above and will be set using setTextFont
+if the font integer is negative it will refer to a custom FreeFont that has been added to this program and print using setFreeFont
 */
+
+struct sText {
+  String text;
+  int xPos, yPos, colour, size, datum, font;
+};
 
 //The Button element defines the interactable part of the screen
 struct Button {
   uint16_t x, y, w, h;
   uint16_t bgColor, textColor, borderColor;
   String label;
-  bool pressed;
+  int round;
 };
 
 int buttonArrayLen[]= {8,10}; //this will need to be updated, defines the length of each array, my Python head is screaming to use len()
 
 //Probably worth staticing these arrays if possible
+//Rules for buttons:
+//First 3 elements must ALWAYS be the 3 side button representer
+//Parts of the code will reference the size of these first 3 elements if a button is pressed
+
 // 0
 Button infoButtons[8] = {
     
-  {0,0,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"1",false},
-  {0,80,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"2",false},
-  {0,160,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"3",false},
-  {20,200,199,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Key",false},
-  {200,200,39,59,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Oct",false},
-  {0,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 1",false},
-  {119,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 2",false},
-  {80,285,80,44,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Menu",false}
+  {0,0,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"1",0},
+  {0,80,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"2",0},
+  {0,160,19,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"3",0},
+  {20,190,199,51,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Key",0},
+  {200,190,39,51,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Oct",0},
+  {0,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 1",0},
+  {119,240,120,79,TFT_BLACK,TFT_WHITE,TFT_WHITE,"QA 2",0},
+  {80,285,80,35,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Menu",10}
 };
 
 // 1
 Button mainMenuButtons[10] = {
   //static elements of the menu
-  {0,0,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"^",false},
-  {0,80,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,">",false},
-  {0,160,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"v",false},
-  {8,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Exit Menu",false},
-  {128,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Return",false},
+  {0,0,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"^",0},
+  {0,80,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,">",0},
+  {0,160,39,79,TFT_WHITE,TFT_BLACK,TFT_TRANSPARENT,"v",0},
+  {8,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Exit Menu",10},
+  {128,270,100,45,TFT_BLACK,TFT_WHITE,TFT_WHITE,"Return",10},
 
   //Dynamic elements, 
-  {50,0,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "T Item", false},
-  {50,40,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "TM Item", false},
-  {50,80,190,79,TFT_BLACK, TFT_WHITE, TFT_WHITE, "M Item", false},
-  {50,164,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "BM Item", false},
-  {50,204,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "B Item", false}
+  {50,0,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "T Item", 10},
+  {50,40,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "TM Item", 10},
+  {50,80,190,79,TFT_BLACK, TFT_WHITE, TFT_WHITE, "M Item", 0},
+  {50,164,170,35,TFT_BLACK, TFT_LIGHTGREY, TFT_LIGHTGREY, "BM Item", 10},
+  {50,204,150,35,TFT_BLACK, TFT_DARKGREY, TFT_DARKGREY, "B Item", 10}
 };
 
 
 //The saviour of several KB of flash, processing power, and hopefully more hours of my life than it did to figure this out
 Button *pBtnArray[2] = {infoButtons, mainMenuButtons};// this honestly took me several hours to come up with, if this didnt work each layout would have to have its own function to work out what button was pressed
 
+//If true will disable the text renderer and will print the text stored in the button arrays
+bool debugTFTbtns = true;
 
-
+//button renderer if that's a real word
 void drawButton(Button &btn) {
-  // Draw border
-  tft.drawRoundRect(btn.x, btn.y, btn.w, btn.h, 10, btn.borderColor);
-  
-  // Draw background
-  tft.fillRoundRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2, 10, btn.bgColor);
+  if (btn.round > 0) {
+    // Draw border
+    tft.drawRoundRect(btn.x, btn.y, btn.w, btn.h, btn.round, btn.borderColor);
+    
+    // Draw background
+    tft.fillRoundRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2, btn.round, btn.bgColor);
+  } else {
+    // Draw border
+    tft.drawRect(btn.x, btn.y, btn.w, btn.h, btn.borderColor);
+    
+    // Draw background
+    tft.fillRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2, btn.bgColor);
+  }
 
-  // Draw text centered
-  tft.setTextColor(btn.textColor, btn.bgColor);
-  tft.setTextSize(1);
-  
-  int16_t textX = btn.x + (btn.w - tft.textWidth(btn.label)) / 2;
-  int16_t textY = btn.y + (btn.h - 8) / 2;
-  
-  tft.drawString(btn.label, textX, textY, 4);
+  //in the long run I don't want the buttons to be associated with printing out text, since it'll loose positional acuracy
+  if (debugTFTbtns == true){
+    // Draw text centered
+    tft.setTextColor(btn.textColor, btn.bgColor);
+    tft.setTextSize(1);
+    
+    int16_t textX = btn.x + (btn.w - tft.textWidth(btn.label)) / 2;
+    int16_t textY = btn.y + (btn.h - 8) / 2;
+    
+    tft.drawString(btn.label, textX, textY, 2);
+  }
 }
 
 void drawScreenButtons(int FscreenID) {
   for (int i = 0; i < buttonArrayLen[FscreenID]; i++) {// i < x where x needs to be equal to the number of buttons
     drawButton(pBtnArray[FscreenID][i]);
-  }
-}
-
-void showMessage(const char* message) {
-  // Display message at bottom of screen
-  tft.fillRect(0, 200, 320, 40, TFT_BLACK);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.drawString(message, 10, 210, 4);
-  delay(2000);
-  tft.fillRect(0, 200, 320, 40, TFT_BLACK);
-}
-
-void drawButtons(int ID) {
-  switch (ID)
-  {
-  case 0:
-    for (int i = 0; i < 12; i++) {// i < x where x needs to be equal to the number of buttons within an array
-      drawButton(infoButtons[i]);
-    break;
-    }
   }
 }
 
@@ -280,26 +279,80 @@ void bootScreen() {
     }
   }
   */
-  tft.drawSmoothArc(42,264,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(0,221,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(42,178,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(0,135,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(42,92,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(0,49,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
-  tft.drawSmoothArc(42,6,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
-  tft.fillRoundRect(0,200,50,400,10,TFT_BLACK);
-  tft.drawRoundRect(0,200,50,400,10,TFT_WHITE);
-  
-  delay(250);
+  tft.drawSmoothArc(137,264,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(95,221,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(137,178,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(95,135,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(137,92,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(95,49,30,30,225,315,TFT_WHITE,TFT_TRANSPARENT);
+  tft.drawSmoothArc(137,6,30,30,45,135,TFT_WHITE,TFT_TRANSPARENT);
+  tft.fillRoundRect(95,200,50,400,10,TFT_BLACK);
+  tft.drawRoundRect(95,200,50,400,10,TFT_WHITE);
+
+
   digitalWrite(rLED,HIGH);
-  delay(250);
+  tft.drawLine(100,200,0,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(102,200,12,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(104,200,24,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(106,200,36,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(108,200,48,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(110,200,60,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(112,200,72,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(114,200,84,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(116,200,96,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(118,200,108,0,TFT_WHITE);
+  delay(40);
   digitalWrite(rLED,LOW);
   digitalWrite(gLED,HIGH);
-  delay(250);
+  tft.drawFastVLine(120,0,200,TFT_WHITE);
+  delay(40);
+  tft.drawLine(122,200,134,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(124,200,146,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(126,200,158,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(128,200,170,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(130,200,182,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(132,200,194,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(134,200,206,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(136,200,218,0,TFT_WHITE);
+  delay(40);
+  tft.drawLine(138,200,230,0,TFT_WHITE);
   digitalWrite(gLED,LOW);
   digitalWrite(bLED,HIGH);
-  delay(250);
+  delay(400);
   digitalWrite(bLED,LOW);
+  delay(1000);
+
+}
+
+//specify which button to get the status of
+int updateBtn(int btn) {
+  switch (btn)
+  {
+  case 1:
+    return (digitalRead(btn1));
+  case 2:
+    return (digitalRead(btn2));
+  case 3:
+    return (digitalRead(btn3));
+  default:
+    return(LOW);
+  }
 }
 
 void setup() {
@@ -333,7 +386,6 @@ void setup() {
 
 
 void loop() {
-
   //this if statement will probably become a func and will manage if the screen layout has requested to be changed through the screenID variable
   if (screenID == -1) {
     tft.fillScreen(TFT_BLACK);
@@ -344,6 +396,10 @@ void loop() {
     tft.fillScreen(TFT_BLACK);
     drawScreenButtons(screenID);
     prevScreenID = screenID;
+  }
+
+  if (updateBtn(1) == HIGH) {
+
   }
 
   uint16_t x, y;
