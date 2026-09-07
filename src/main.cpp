@@ -240,18 +240,45 @@ void handleMenuPress(int btnPress) {
   }
 }
 
+bool isHiLight = false;
+bool isHiLighted = false;
+//Delay cannot be used in this function as the whole program would be waiting here
+//we need to add a cycle delay to freeze any updates to the display
+//We then need to loop through this function several hundered times and then once we've done that
+//the display can transition to the new layout
+void hiLightBtnPress(Button &btn) {
+  static int hiLightCount = 0;
+  if ((isHiLight == false) && (hiLightCount == 0)) {
+    isHiLight = true;
+    if (btn.round > 0){
+      tft.fillRoundRect(btn.x+1, btn.y+1, btn.w-1, btn.h-1, btn.round, TFT_SKYBLUE);
+    } else {
+      tft.fillRect(btn.x+1, btn.y+1, btn.w-1, btn.h-1, TFT_SKYBLUE);
+    }
+  } else if ((isHiLight == true) && (hiLightCount < 100)) {
+    hiLightCount++;
+  } else {
+    isHiLight = false;
+    hiLightCount = 0;
+  }
+  
+}
 
 void handleButtonPress(uint16_t x, uint16_t y, int ID) {
   for (int i = 0; i<buttonArrayLen[ID]; i++) {
     if (x >= pBtnArray[ID][i].x && x <= (pBtnArray[ID][i].x + pBtnArray[ID][i].w) &&
     y >= pBtnArray[ID][i].y && y <= (pBtnArray[ID][i].y + pBtnArray[ID][i].h)) {
-      switch (screenID) {
-        case 0:
-          handleInfoPress(i);
-          break;
-        case 1:
-          handleMenuPress(i);
-          break;
+      if (isHiLighted == true) {
+        switch (screenID) {
+          case 0:
+            handleInfoPress(i);
+            break;
+          case 1:
+            handleMenuPress(i);
+            break;
+        }
+      } else {//if the highlight hasnt happened yet
+
       }
     }
   }
